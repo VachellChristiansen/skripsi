@@ -1,0 +1,9 @@
+{{ define "body" }}
+<body class="w-screen h-screen overflow-hidden font-jsans">
+    <div class="w-full h-full flex flex-col bg-stone-100 text-stone-800">
+        {{ template "header" . }}
+        {{ template "main" . }}
+        {{ template "footer" }}
+    </div>
+</body>
+{{ end }}
