@@ -2,6 +2,7 @@ package processor
 
 import (
 	"net/http"
+	"skripsi/helper"
 
 	"github.com/labstack/echo/v4"
 )
@@ -11,10 +12,13 @@ type WebViewProcessor interface {
 }
 
 type WebViewProcessorImpl struct {
+	logger helper.LoggerHelper
 }
 
-func NewWebViewProcessor() WebViewProcessor {
-	return &WebViewProcessorImpl{}
+func NewWebViewProcessor(l helper.LoggerHelper) WebViewProcessor {
+	return &WebViewProcessorImpl{
+		logger: l,
+	}
 }
 
 func (p *WebViewProcessorImpl) ServeIndexPage(c echo.Context) error {

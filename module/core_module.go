@@ -12,9 +12,10 @@ type CoreModule struct {
 }
 
 func NewCoreModule() CoreModule {
+	l := helper.NewLoggerHelper()
 	return CoreModule{
 		Database:  database.NewDatabase(),
 		Helper:    helper.NewHelper(),
-		WebModule: NewWebModule(),
+		WebModule: NewWebModule(l),
 	}
 }

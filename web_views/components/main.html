@@ -1,6 +1,129 @@
 {{ define "main" }}
-<main class="w-full my-2 flex-1 flex justify-center overflow-auto">
-    <div class="max-w-[600px] md:max-w-[750px] lg:max-w-[1000px] xl:max-w-[1250px] w-full px-4 md:px-0 animate-fade-in-left">
+<main class="w-full h-full my-2 flex-1 flex justify-center overflow-auto">
+    <div class="max-w-[600px] md:max-w-[750px] lg:max-w-[1000px] xl:max-w-[1250px] w-full h-full px-4 md:px-0">
+        <div x-data="{ message: true }" class="relative w-full h-full">
+            <div id="test" class="w-full h-full flex flex-col gap-2">
+                <form class="w-full pt-2 flex justify-around">
+                    <div class="flex gap-2 items-center">
+                        <label for="start_date">Start Date</label>
+                        <input class="p-1 bg-stone-300" type="date" id="start_date" name="start_date" min="2008-01-01" max="2024-09-30">
+                    </div>
+                    <div class="flex gap-2 items-center">
+                        <label for="end_date">End Date</label>
+                        <input class="p-1 bg-stone-300" type="date" id="end_date" name="end_date" min="2008-01-01" max="2024-09-30">
+                    </div>
+                    <div class="flex gap-2 items-center">
+                        <label for="city">City</label>
+                        <select class="p-1 bg-stone-300" id="city" name="city">
+                            <option value="" disabled selected>Select an option</option>
+                            <option value="jakarta barat">Jakarta Barat</option>
+                            <option value="jakarta utara">Jakarta Utara</option>
+                            <option value="jakarta timur">Jakarta Timur</option>
+                            <option value="jakarta selatan">Jakarta Selatan</option>
+                            <option value="jakarta pusat">Jakarta Pusat</option>
+                            <option value="bogor">Bogor</option>
+                            <option value="depok">Depok</option>
+                            <option value="tangerang">Tangerang</option>
+                            <option value="bekasi">Bekasi</option>
+                          </select>
+                    </div>
+                    <button hx-post="/flood" hx-target="main" hx-swap="outerHTML" type="submit" class="p-2 rounded-lg border-2 hover:brightness-75 active:brightness-50">Submit</button>
+                </form>
+                {{ if .Data }}
+                <div x-data="{ showing: 'nasa' }" class="w-full flex-1 flex gap-4 overflow-auto">
+                    <div x-show="showing === 'nasa'" class="w-full h-full overflow-auto">
+                        <div class="w-full h-full overflow-x-auto">
+                            <table class="min-w-full h-full table-auto border-collapse">
+                                <thead class="bg-gray-200">
+                                <tr>
+                                    {{ range .Data.NasaHeaders }}
+                                    <th class="px-4 py-2 sticky top-0 bg-gray-200">{{ . }}</th>
+                                    {{ end }}
+                                </tr>
+                                </thead>
+                                <tbody>
+                                    {{ range .Data.NasaValues }}
+                                    <tr>
+                                        {{ range . }}
+                                        <td class="border px-4 py-2">{{ . }}</td>
+                                        {{ end}}
+                                    </tr>
+                                    {{ end }}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div x-show="showing === 'bnpb'" class="w-full h-full overflow-auto">
+                        <div class="w-full h-full overflow-x-auto">
+                            <table class="min-w-full table-auto border-collapse">
+                                <thead class="bg-gray-200">
+                                <tr>
+                                    {{ range .Data.BnpbHeaders }}
+                                    <th class="px-4 py-2 sticky top-0 bg-gray-200">{{ . }}</th>
+                                    {{ end }}
+                                </tr>
+                                </thead>
+                                <tbody>
+                                    {{ range .Data.BnpbValues }}
+                                    <tr>
+                                        {{ range . }}
+                                        <td class="border px-4 py-2">{{ . }}</td>
+                                        {{ end}}
+                                    </tr>
+                                    {{ end }}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div x-show="showing === 'bnpbOri'" class="w-full h-full overflow-auto">
+                        <div class="w-full h-full overflow-x-auto">
+                            <table class="min-w-full table-auto border-collapse">
+                                <thead class="bg-gray-200">
+                                <tr>
+                                    {{ range .Data.BnpbHeadersOri }}
+                                    <th class="px-4 py-2 sticky top-0 bg-gray-200">{{ . }}</th>
+                                    {{ end }}
+                                </tr>
+                                </thead>
+                                <tbody>
+                                    {{ range .Data.BnpbValuesOri }}
+                                    <tr>
+                                        {{ range . }}
+                                        <td class="border px-4 py-2">{{ . }}</td>
+                                        {{ end}}
+                                    </tr>
+                                    {{ end }}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="w-1/6 h-full flex flex-col justify-between">
+                        <div class="w-full flex flex-col gap-2">
+                            <button @click="showing = 'nasa'" class="p-2 rounded-lg border-2 hover:brightness-75 active:brightness-50">NASA DATA</button>
+                            <button @click="showing = 'bnpb'" class="p-2 rounded-lg border-2 hover:brightness-75 active:brightness-50">BNPB DATA</button>
+                            <button @click="showing = 'bnpbOri'" class="p-2 rounded-lg border-2 hover:brightness-75 active:brightness-50">ORIGINAL BNPB DATA</button>
+                        </div>
+                        <div class="w-full p-2 border-2 rounded-md">
+                            {{ range $key, $value := .Data.StatisticData }}
+                            <div>
+                                {{ $key }}: {{ $value }}
+                            </div>
+                            {{ end }}
+                        </div>
+                    </div>
+                </div>
+                {{ end }}
+            </div>
+            <div class="absolute bottom-0 w-full p-2 {{ if .Err }} bg-rose-200 animate-fadeToTransparentA {{ else if .Message }} bg-emerald-200 animate-fadeToTransparentB {{ else }} bg-transparent text-transparent select-none {{ end }}">
+                {{ if .Err }}
+                Error Occured : {{ .Err }}
+                {{ else if .Message }}
+                Processing Done : {{ .Message }}
+                {{ else }}
+                M
+                {{ end }}
+            </div>
+        </div>
     </div>
 </main>
 {{ end }}

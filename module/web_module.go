@@ -2,6 +2,7 @@ package module
 
 import (
 	"os"
+	"skripsi/helper"
 	"skripsi/processor"
 	"skripsi/utils"
 	"strings"
@@ -16,12 +17,12 @@ type WebModule interface {
 }
 
 type WebModuleImpl struct {
-	e                *echo.Echo
-	WebViewProcessor processor.WebViewProcessor
-	WebProcessor     processor.WebProcessor
+	e         *echo.Echo
+	logger    helper.LoggerHelper
+	Processor processor.Processor
 }
 
-func NewWebModule() WebModule {
+func NewWebModule(l helper.LoggerHelper) WebModule {
 	e := echo.New()
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		AllowOrigins:     strings.Split(os.Getenv("CORS_ALLOW_ORIGINS"), ","),
@@ -33,9 +34,9 @@ func NewWebModule() WebModule {
 	}))
 	e.Renderer = utils.NewTemplate()
 	return &WebModuleImpl{
-		e: e,
-		WebViewProcessor: processor.NewWebViewProcessor(),
-		WebProcessor: processor.NewWebProcessor(),
+		e:         e,
+		logger:    l,
+		Processor: processor.NewProcessor(l),
 	}
 }
 
@@ -43,10 +44,10 @@ func (m *WebModuleImpl) Init() {
 	static := m.e.Group("/static")
 	static.Static("/", "web_views/static/")
 
-	m.e.GET("/", m.WebViewProcessor.ServeIndexPage)
+	m.e.GET("/", m.Processor.WebViewProcessor.ServeIndexPage)
+	m.e.POST("/flood", m.Processor.WebProcessor.HandleFloodPredictionRequest)
 }
 
 func (m *WebModuleImpl) Serve() {
 	m.e.Start(":49991")
 }
-
