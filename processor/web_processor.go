@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -106,8 +107,8 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 		})
 	}
 
-	statisticData := make(map[string]interface{})
-	err = p.PrepareStatistics(&bnpbData, &nasaData, startDate, endDate, &statisticData)
+	statisticData := []map[string]interface{}{}
+	err = p.PrepareStatistics(&bnpbData, &nasaData, startDate, endDate, city, &statisticData)
 	if err != nil {
 		return c.Render(http.StatusOK, "main", IndexData{
 			Err:        fmt.Sprintf("Processing Statistic, %s", err.Error()),
@@ -118,7 +119,8 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 	return c.Render(http.StatusOK, "main", IndexData{
 		Data: map[string]interface{}{
 			"NasaHeaders":    nasaData[0],
-			"NasaValues":     nasaData[1:],
+			"NasaStat":       nasaData[1:6],
+			"NasaValues":     nasaData[6:],
 			"BnpbHeaders":    bnpbData[0],
 			"BnpbValues":     bnpbData[1:],
 			"BnpbHeadersOri": bnpbDataOri[0],
@@ -206,9 +208,18 @@ func (p *WebProcessorImpl) PreprocessNasaCSV(nasaData *[][]string) error {
 		return errors.New("Reading data csv file fails")
 	}
 
-	headers := records[0]
+	headers := records[0][2:]
 	records = records[1:]
-	headersWithDate := append([]string{"DATE"}, headers[2:]...)
+	headersWithDate := append([]string{"DATE"}, headers...)
+
+	indexMap := make(map[string]int)
+	for i, header := range headers {
+		indexMap[header] = i
+	}
+
+	totalSlice := []float64{0, 0, 0, 0, 0, 0}
+	minSlice := []float64{999, 999, 999, 999, 999, 999}
+	maxSlice := []float64{-999, -999, -999, -999, -999, -999}
 
 	for _, record := range records {
 		year, _ := strconv.Atoi(record[0])
@@ -218,10 +229,89 @@ func (p *WebProcessorImpl) PreprocessNasaCSV(nasaData *[][]string) error {
 		date := startOfYear.AddDate(0, 0, doy-1)
 		stringDate := date.Format("2006/01/02")
 
+		dataValue := record[2:]
+		ws10m, _ := strconv.ParseFloat(dataValue[indexMap["WS10M"]], 32)
+		rh2m, _ := strconv.ParseFloat(dataValue[indexMap["RH2M"]], 32)
+		prectotcorr, _ := strconv.ParseFloat(dataValue[indexMap["PRECTOTCORR"]], 32)
+		t2m, _ := strconv.ParseFloat(dataValue[indexMap["T2M"]], 32)
+		t2mMax, _ := strconv.ParseFloat(dataValue[indexMap["T2M_MAX"]], 32)
+		t2mMin, _ := strconv.ParseFloat(dataValue[indexMap["T2M_MIN"]], 32)
+
+		values := []float64{0, 0, 0, 0, 0, 0}
+		values[indexMap["WS10M"]] = ws10m
+		values[indexMap["RH2M"]] = rh2m
+		values[indexMap["PRECTOTCORR"]] = prectotcorr
+		values[indexMap["T2M"]] = t2m
+		values[indexMap["T2M_MAX"]] = t2mMax
+		values[indexMap["T2M_MIN"]] = t2mMin
+
+		for _, i := range indexMap {
+			totalSlice[i] += values[i]
+			if minSlice[i] > values[i] {
+				minSlice[i] = values[i]
+			}
+			if maxSlice[i] < values[i] {
+				maxSlice[i] = values[i]
+			}
+		}
+
 		recordData := append([]string{stringDate}, record[2:]...)
 		*nasaData = append(*nasaData, recordData)
 	}
-	*nasaData = append([][]string{headersWithDate}, *nasaData...)
+
+	meanSlice := []float64{0, 0, 0, 0, 0, 0}
+
+	for _, i := range indexMap {
+		meanSlice[i] = totalSlice[i] / float64(len(records))
+	}
+
+	varianceSlice := []float64{0, 0, 0, 0, 0, 0}
+	for _, record := range records {
+		dataValue := record[2:]
+		ws10m, _ := strconv.ParseFloat(dataValue[indexMap["WS10M"]], 32)
+		rh2m, _ := strconv.ParseFloat(dataValue[indexMap["RH2M"]], 32)
+		prectotcorr, _ := strconv.ParseFloat(dataValue[indexMap["PRECTOTCORR"]], 32)
+		t2m, _ := strconv.ParseFloat(dataValue[indexMap["T2M"]], 32)
+		t2mMax, _ := strconv.ParseFloat(dataValue[indexMap["T2M_MAX"]], 32)
+		t2mMin, _ := strconv.ParseFloat(dataValue[indexMap["T2M_MIN"]], 32)
+		values := []float64{0, 0, 0, 0, 0, 0}
+		values[indexMap["WS10M"]] = ws10m
+		values[indexMap["RH2M"]] = rh2m
+		values[indexMap["PRECTOTCORR"]] = prectotcorr
+		values[indexMap["T2M"]] = t2m
+		values[indexMap["T2M_MAX"]] = t2mMax
+		values[indexMap["T2M_MIN"]] = t2mMin
+
+		for _, i := range indexMap {
+			varianceSlice[i] += math.Pow(values[i]-meanSlice[i], 2)
+		}
+	}
+
+	stdDevSlice := []float64{0, 0, 0, 0, 0, 0}
+	for _, i := range indexMap {
+		varianceSlice[i] = varianceSlice[i] / float64(len(records))
+		stdDevSlice[i] = math.Sqrt(varianceSlice[i])
+	}
+
+	meanSliceStr := []string{"", "", "", "", "", ""}
+	minSliceStr := []string{"", "", "", "", "", ""}
+	maxSliceStr := []string{"", "", "", "", "", ""}
+	stdDevSliceStr := []string{"", "", "", "", "", ""}
+	varianceSliceStr := []string{"", "", "", "", "", ""}
+	for _, i := range indexMap {
+		meanSliceStr[i] = strconv.FormatFloat(meanSlice[i], 'f', 2, 64)
+		minSliceStr[i] = strconv.FormatFloat(minSlice[i], 'f', 2, 64)
+		maxSliceStr[i] = strconv.FormatFloat(maxSlice[i], 'f', 2, 64)
+		stdDevSliceStr[i] = strconv.FormatFloat(stdDevSlice[i], 'f', 2, 64)
+		varianceSliceStr[i] = strconv.FormatFloat(varianceSlice[i], 'f', 2, 64)
+	}
+	meanSliceStr = append([]string{"MEAN"}, meanSliceStr...)
+	minSliceStr = append([]string{"MIN"}, minSliceStr...)
+	maxSliceStr = append([]string{"MAX"}, maxSliceStr...)
+	stdDevSliceStr = append([]string{"STD DEV"}, stdDevSliceStr...)
+	varianceSliceStr = append([]string{"VAR"}, varianceSliceStr...)
+
+	*nasaData = append([][]string{headersWithDate, meanSliceStr, minSliceStr, maxSliceStr, stdDevSliceStr, varianceSliceStr}, *nasaData...)
 	return nil
 }
 
@@ -301,11 +391,15 @@ func (p *WebProcessorImpl) PreprocessBNPBCSV(bnpbData *[][]string, bnpbDataOri *
 	return nil
 }
 
-func (p *WebProcessorImpl) PrepareStatistics(bnpbData, nasaData *[][]string, startDate, endDate time.Time, statisticData *map[string]interface{}) error {
-	stats := make(map[string]interface{})
-	stats["DayCount"] = int(endDate.Sub(startDate).Hours()/24) + 1
-	stats["DataCount"] = len(*nasaData) - 1
-	stats["FloodCount"] = len(*bnpbData) - 1
+func (p *WebProcessorImpl) PrepareStatistics(bnpbData, nasaData *[][]string, startDate, endDate time.Time, city string, statisticData *[]map[string]interface{}) error {
+	stats := []map[string]interface{}{}
+	stats = append(stats, map[string]interface{}{"StartDate": startDate.Format("2006/01/02")})
+	stats = append(stats, map[string]interface{}{"EndDate": endDate.Format("2006/01/02")})
+	stats = append(stats, map[string]interface{}{"City": strings.ToUpper(city)})
+	stats = append(stats, map[string]interface{}{"DayCount": int(endDate.Sub(startDate).Hours()/24) + 1})
+	stats = append(stats, map[string]interface{}{"DataCount": len(*nasaData) - 6})
+	stats = append(stats, map[string]interface{}{"FloodCount": len(*bnpbData) - 1})
+	stats = append(stats, map[string]interface{}{"FloodPercentage": float64((float64(len(*bnpbData)) - 1) / (float64(len(*nasaData)) - 1) * 100)})
 
 	*statisticData = stats
 	return nil
