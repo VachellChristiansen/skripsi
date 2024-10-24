@@ -12,11 +12,13 @@ import (
 	"path/filepath"
 	"skripsi/constant"
 	"skripsi/helper"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"gonum.org/v1/gonum/mat"
 )
 
 type WebProcessor interface {
@@ -65,6 +67,21 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 		})
 	}
 
+	kValue, err := strconv.Atoi(c.FormValue("k_value"))
+	if err != nil {
+		return c.Render(http.StatusOK, "main", IndexData{
+			Err:        "K Value is not a valid number",
+			StatusCode: http.StatusUnprocessableEntity,
+		})
+	}
+
+	if kValue <= 0 || kValue > 500 {
+		return c.Render(http.StatusOK, "main", IndexData{
+			Err:        "Chosen K Value is not Valid (Must be 1 - 500)",
+			StatusCode: http.StatusUnprocessableEntity,
+		})
+	}
+
 	startDateRequest := strings.ReplaceAll(c.FormValue("start_date"), "-", "")
 	endDateRequest := strings.ReplaceAll(c.FormValue("end_date"), "-", "")
 
@@ -79,6 +96,7 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 	latitude := strings.Split(latlong, "&")[0]
 	longitude := strings.Split(latlong, "&")[1]
 
+	p.logger.LogAndContinue("Preparing Nasa Data")
 	url := fmt.Sprintf("%s?start=%s&end=%s&latitude=%s&longitude=%s&%s", constant.NasaPowerAPIBaseURL, startDateRequest, endDateRequest, latitude, longitude, constant.NasaPowerAPIParams)
 	err = p.PrepareNasaCSV(url)
 	if err != nil {
@@ -88,8 +106,10 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 		})
 	}
 
-	nasaData := [][]string{}
-	err = p.PreprocessNasaCSV(&nasaData)
+	p.logger.LogAndContinue("Preprocessing Nasa Data")
+	nasaData := [][]float64{}
+	nasaDataStr := [][]string{}
+	err = p.PreprocessNasaCSV(&nasaDataStr, &nasaData)
 	if err != nil {
 		return c.Render(http.StatusOK, "main", IndexData{
 			Err:        fmt.Sprintf("Preprocessing NASA data fails, %s", err.Error()),
@@ -97,9 +117,11 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 		})
 	}
 
+	p.logger.LogAndContinue("Preprocessing BNPB Data")
 	bnpbData := [][]string{}
 	bnpbDataOri := [][]string{}
-	err = p.PreprocessBNPBCSV(&bnpbData, &bnpbDataOri, startDate, endDate, city)
+	floodData := []float64{}
+	err = p.PreprocessBNPBCSV(&bnpbData, &bnpbDataOri, &floodData, startDate, endDate, city)
 	if err != nil {
 		return c.Render(http.StatusOK, "main", IndexData{
 			Err:        fmt.Sprintf("Preprocessing BNPB data fails, %s", err.Error()),
@@ -107,25 +129,100 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 		})
 	}
 
+	p.logger.LogAndContinue("Preparing Statistics from Data")
 	statisticData := []map[string]interface{}{}
-	err = p.PrepareStatistics(&bnpbData, &nasaData, startDate, endDate, city, &statisticData)
+	err = p.PrepareStatistics(&bnpbData, &nasaDataStr, startDate, endDate, city, &statisticData)
 	if err != nil {
 		return c.Render(http.StatusOK, "main", IndexData{
-			Err:        fmt.Sprintf("Processing Statistic, %s", err.Error()),
+			Err:        fmt.Sprintf("Processing Statistic fails, %s", err.Error()),
 			StatusCode: http.StatusInternalServerError,
 		})
 	}
 
+	p.logger.LogAndContinue("Merging Nasa Data with Flood occurence")
+	nasaWithFloodDataStr := p.MergeNASAWithFlood(nasaDataStr, floodData)
+
+	p.logger.LogAndContinue("ADF Test and Differencing")
+	var stationaryNasaData [][]float64
+	stationaryDataMinLength := 99999
+	maxDifferencingStep := -99999
+	for i := 0; i < len(nasaData); i++ {
+		stationary, err := p.adfTest(nasaData[i])
+		if err != nil {
+			return c.Render(http.StatusOK, "main", IndexData{
+				Err:        fmt.Sprintf("Processing ADF test fails, %s", err.Error()),
+				StatusCode: http.StatusInternalServerError,
+			})
+		}
+
+		differencingStep := 0
+		differencedNasaDataColumn := nasaData[i]
+		for !stationary {
+			differencingStep++
+			differencedNasaDataColumn = p.differencing(differencedNasaDataColumn)
+			stationary, err = p.adfTest(differencedNasaDataColumn)
+			if err != nil {
+				return c.Render(http.StatusOK, "main", IndexData{
+					Err:        fmt.Sprintf("Processing ADF test fails, %s", err.Error()),
+					StatusCode: http.StatusInternalServerError,
+				})
+			}
+		}
+
+		if maxDifferencingStep < differencingStep {
+			maxDifferencingStep = differencingStep
+		}
+		if stationaryDataMinLength > len(differencedNasaDataColumn) {
+			stationaryDataMinLength = len(differencedNasaDataColumn)
+		}
+		stationaryNasaData = append(stationaryNasaData, differencedNasaDataColumn)
+	}
+
+	p.logger.LogAndContinue("Uniforming data length after differencing")
+	var stationaryNasaWithFloodData [][]float64
+	for _, data := range stationaryNasaData {
+		differencedData := data
+		for i := 0; i < len(data)-stationaryDataMinLength; i++ {
+			differencedData = p.differencing(data)
+		}
+		stationaryNasaWithFloodData = append(stationaryNasaWithFloodData, differencedData)
+	}
+	stationaryNasaWithFloodData = append(stationaryNasaWithFloodData, floodData[len(floodData)-stationaryDataMinLength:len(floodData)])
+
+	p.logger.LogAndContinue("Predicting Next Value with Vector Autoregression")
+	predictedValues, err := p.vectorAutoregression(stationaryNasaWithFloodData)
+	if err != nil {
+		return c.Render(http.StatusOK, "main", IndexData{
+			Err:        fmt.Sprintf("Processing VAR Autoregression fails, %s", err.Error()),
+			StatusCode: http.StatusInternalServerError,
+		})
+	}
+
+	var predictedValuesStr []string
+	for _, predictedValue := range predictedValues {
+		predictedValuesStr = append(predictedValuesStr, fmt.Sprintf("%0.4f", predictedValue))
+	}
+
+	p.logger.LogAndContinue("Performing KNN Classification")
+	knnResult, knnScore := p.knnClassification(predictedValues, stationaryNasaWithFloodData, kValue)
+
+	p.logger.LogAndContinue("Done Processing Request")
 	return c.Render(http.StatusOK, "main", IndexData{
 		Data: map[string]interface{}{
-			"NasaHeaders":    nasaData[0],
-			"NasaStat":       nasaData[1:6],
-			"NasaValues":     nasaData[6:],
-			"BnpbHeaders":    bnpbData[0],
-			"BnpbValues":     bnpbData[1:],
-			"BnpbHeadersOri": bnpbDataOri[0],
-			"BnpbValuesOri":  bnpbDataOri[1:],
-			"StatisticData":  statisticData,
+			"NasaHeaders":      nasaDataStr[0],
+			"NasaStat":         nasaDataStr[1:6],
+			"NasaValues":       nasaDataStr[6:],
+			"NasaFloodHeaders": append(nasaDataStr[0], "FLOOD"),
+			"NasaFloodValues":  nasaWithFloodDataStr,
+			"BnpbHeaders":      bnpbData[0],
+			"BnpbValues":       bnpbData[1:],
+			"BnpbHeadersOri":   bnpbDataOri[0],
+			"BnpbValuesOri":    bnpbDataOri[1:],
+			"StatisticData":    statisticData,
+			"DifferencingStep": strconv.Itoa(maxDifferencingStep),
+			"PredictedValues":  predictedValuesStr,
+			"KNNResult":        strconv.Itoa(knnResult),
+			"KNNScore":         fmt.Sprintf("%0.5f", knnScore),
 		},
 		Message:    fmt.Sprintf("Preparation Done. Time Taken: %dms", time.Since(start).Milliseconds()),
 		StatusCode: http.StatusOK,
@@ -190,7 +287,7 @@ func (p *WebProcessorImpl) PrepareNasaCSV(url string) error {
 	return nil
 }
 
-func (p *WebProcessorImpl) PreprocessNasaCSV(nasaData *[][]string) error {
+func (p *WebProcessorImpl) PreprocessNasaCSV(nasaDataStr *[][]string, nasaData *[][]float64) error {
 	wd, err := os.Getwd()
 	if err != nil {
 		return errors.New("Get working directory fails Preprocess NASA")
@@ -210,7 +307,7 @@ func (p *WebProcessorImpl) PreprocessNasaCSV(nasaData *[][]string) error {
 
 	headers := records[0][2:]
 	records = records[1:]
-	headersWithDate := append([]string{"DATE"}, headers...)
+	headersWithDate := []string{"DATE", "WS10M", "RH2M", "PRECTOTCORR", "T2M", "T2M_MAX", "T2M_MIN"}
 
 	indexMap := make(map[string]int)
 	for i, header := range headers {
@@ -218,9 +315,8 @@ func (p *WebProcessorImpl) PreprocessNasaCSV(nasaData *[][]string) error {
 	}
 
 	totalSlice := []float64{0, 0, 0, 0, 0, 0}
-	minSlice := []float64{999, 999, 999, 999, 999, 999}
-	maxSlice := []float64{-999, -999, -999, -999, -999, -999}
 
+	tempData := make([][]float64, 6)
 	for _, record := range records {
 		year, _ := strconv.Atoi(record[0])
 		doy, _ := strconv.Atoi(record[1])
@@ -237,35 +333,34 @@ func (p *WebProcessorImpl) PreprocessNasaCSV(nasaData *[][]string) error {
 		t2mMax, _ := strconv.ParseFloat(dataValue[indexMap["T2M_MAX"]], 32)
 		t2mMin, _ := strconv.ParseFloat(dataValue[indexMap["T2M_MIN"]], 32)
 
-		values := []float64{0, 0, 0, 0, 0, 0}
-		values[indexMap["WS10M"]] = ws10m
-		values[indexMap["RH2M"]] = rh2m
-		values[indexMap["PRECTOTCORR"]] = prectotcorr
-		values[indexMap["T2M"]] = t2m
-		values[indexMap["T2M_MAX"]] = t2mMax
-		values[indexMap["T2M_MIN"]] = t2mMin
+		values := []float64{ws10m, rh2m, prectotcorr, t2m, t2mMax, t2mMin}
+		valuesStr := []string{dataValue[indexMap["WS10M"]], dataValue[indexMap["RH2M"]], dataValue[indexMap["PRECTOTCORR"]], dataValue[indexMap["T2M"]], dataValue[indexMap["T2M_MAX"]], dataValue[indexMap["T2M_MIN"]]}
 
-		for _, i := range indexMap {
-			totalSlice[i] += values[i]
-			if minSlice[i] > values[i] {
-				minSlice[i] = values[i]
-			}
-			if maxSlice[i] < values[i] {
-				maxSlice[i] = values[i]
-			}
+		for i, value := range values {
+			totalSlice[i] += value
+			tempData[i] = append(tempData[i], value)
 		}
 
-		recordData := append([]string{stringDate}, record[2:]...)
-		*nasaData = append(*nasaData, recordData)
+		recordData := append([]string{stringDate}, valuesStr...)
+		*nasaDataStr = append(*nasaDataStr, recordData)
+	}
+	*nasaData = tempData
+
+	maxSlice := []float64{}
+	minSlice := []float64{}
+	for _, item := range tempData {
+		maxSlice = append(maxSlice, p.getMax(item))
+		minSlice = append(minSlice, p.getMin(item))
 	}
 
 	meanSlice := []float64{0, 0, 0, 0, 0, 0}
 
-	for _, i := range indexMap {
-		meanSlice[i] = totalSlice[i] / float64(len(records))
+	for i, total := range totalSlice {
+		meanSlice[i] = total / float64(len(records))
 	}
 
 	varianceSlice := []float64{0, 0, 0, 0, 0, 0}
+	stdDevSlice := []float64{0, 0, 0, 0, 0, 0}
 	for _, record := range records {
 		dataValue := record[2:]
 		ws10m, _ := strconv.ParseFloat(dataValue[indexMap["WS10M"]], 32)
@@ -274,22 +369,14 @@ func (p *WebProcessorImpl) PreprocessNasaCSV(nasaData *[][]string) error {
 		t2m, _ := strconv.ParseFloat(dataValue[indexMap["T2M"]], 32)
 		t2mMax, _ := strconv.ParseFloat(dataValue[indexMap["T2M_MAX"]], 32)
 		t2mMin, _ := strconv.ParseFloat(dataValue[indexMap["T2M_MIN"]], 32)
-		values := []float64{0, 0, 0, 0, 0, 0}
-		values[indexMap["WS10M"]] = ws10m
-		values[indexMap["RH2M"]] = rh2m
-		values[indexMap["PRECTOTCORR"]] = prectotcorr
-		values[indexMap["T2M"]] = t2m
-		values[indexMap["T2M_MAX"]] = t2mMax
-		values[indexMap["T2M_MIN"]] = t2mMin
+		values := []float64{ws10m, rh2m, prectotcorr, t2m, t2mMax, t2mMin}
 
-		for _, i := range indexMap {
-			varianceSlice[i] += math.Pow(values[i]-meanSlice[i], 2)
+		for i, value := range values {
+			varianceSlice[i] += math.Pow(value-meanSlice[i], 2)
 		}
 	}
-
-	stdDevSlice := []float64{0, 0, 0, 0, 0, 0}
-	for _, i := range indexMap {
-		varianceSlice[i] = varianceSlice[i] / float64(len(records))
+	for i, variance := range varianceSlice {
+		varianceSlice[i] = variance / float64(len(records))
 		stdDevSlice[i] = math.Sqrt(varianceSlice[i])
 	}
 
@@ -298,7 +385,7 @@ func (p *WebProcessorImpl) PreprocessNasaCSV(nasaData *[][]string) error {
 	maxSliceStr := []string{"", "", "", "", "", ""}
 	stdDevSliceStr := []string{"", "", "", "", "", ""}
 	varianceSliceStr := []string{"", "", "", "", "", ""}
-	for _, i := range indexMap {
+	for i := 0; i < len(totalSlice); i++ {
 		meanSliceStr[i] = strconv.FormatFloat(meanSlice[i], 'f', 2, 64)
 		minSliceStr[i] = strconv.FormatFloat(minSlice[i], 'f', 2, 64)
 		maxSliceStr[i] = strconv.FormatFloat(maxSlice[i], 'f', 2, 64)
@@ -311,11 +398,11 @@ func (p *WebProcessorImpl) PreprocessNasaCSV(nasaData *[][]string) error {
 	stdDevSliceStr = append([]string{"STD DEV"}, stdDevSliceStr...)
 	varianceSliceStr = append([]string{"VAR"}, varianceSliceStr...)
 
-	*nasaData = append([][]string{headersWithDate, meanSliceStr, minSliceStr, maxSliceStr, stdDevSliceStr, varianceSliceStr}, *nasaData...)
+	*nasaDataStr = append([][]string{headersWithDate, meanSliceStr, minSliceStr, maxSliceStr, stdDevSliceStr, varianceSliceStr}, *nasaDataStr...)
 	return nil
 }
 
-func (p *WebProcessorImpl) PreprocessBNPBCSV(bnpbData *[][]string, bnpbDataOri *[][]string, startDate, endDate time.Time, city string) error {
+func (p *WebProcessorImpl) PreprocessBNPBCSV(bnpbData, bnpbDataOri *[][]string, floodData *[]float64, startDate, endDate time.Time, city string) error {
 	wd, err := os.Getwd()
 	if err != nil {
 		return errors.New("Get working directory fails Preprocess BNPB")
@@ -337,6 +424,7 @@ func (p *WebProcessorImpl) PreprocessBNPBCSV(bnpbData *[][]string, bnpbDataOri *
 	headersOri := records[1]
 	records = records[2:]
 
+	dayCount := int(endDate.Sub(startDate).Hours()/24) + 1
 	data := make(map[string][]string)
 	dataOri := make(map[string][][]string)
 	// 3, Tanggal. 6, Kapbupaten
@@ -367,9 +455,7 @@ func (p *WebProcessorImpl) PreprocessBNPBCSV(bnpbData *[][]string, bnpbDataOri *
 		if strings.Contains(cityLoweredCase, city) {
 			for _, date := range dates {
 				if _, exists := dateMap[date]; !exists {
-
 					mergedCityData = append(mergedCityData, []string{strings.ToUpper(city), date})
-				} else {
 					dateMap[date] = true
 				}
 			}
@@ -385,10 +471,32 @@ func (p *WebProcessorImpl) PreprocessBNPBCSV(bnpbData *[][]string, bnpbDataOri *
 		}
 	}
 
+	var flood []float64
+	for i := 0; i < dayCount; i++ {
+		curr := startDate.Add(time.Hour * 24 * time.Duration(i))
+		currStr := curr.Format("2006/01/02")
+		if _, exists := dateMap[currStr]; exists {
+			flood = append(flood, 1)
+		} else {
+			flood = append(flood, 0)
+		}
+	}
+
+	*floodData = flood
 	*bnpbData = append([][]string{headers}, mergedCityData...)
 	*bnpbDataOri = append([][]string{headersOri}, mergedDataOri...)
 
 	return nil
+}
+
+func (p *WebProcessorImpl) MergeNASAWithFlood(nasaDataStr [][]string, floodData []float64) (result [][]string) {
+	for i, nasaData := range nasaDataStr[6:] {
+		floodStr := strconv.FormatFloat(floodData[i], 'f', 2, 64)
+		nasaData = append(nasaData, floodStr)
+		result = append(result, nasaData)
+	}
+
+	return
 }
 
 func (p *WebProcessorImpl) PrepareStatistics(bnpbData, nasaData *[][]string, startDate, endDate time.Time, city string, statisticData *[]map[string]interface{}) error {
@@ -403,4 +511,168 @@ func (p *WebProcessorImpl) PrepareStatistics(bnpbData, nasaData *[][]string, sta
 
 	*statisticData = stats
 	return nil
+}
+
+func (p *WebProcessorImpl) getMax(data []float64) (max float64) {
+	max = -999999
+	for _, i := range data {
+		if max < i {
+			max = i
+		}
+	}
+	return
+}
+
+func (p *WebProcessorImpl) getMin(data []float64) (min float64) {
+	min = 999999
+	for _, i := range data {
+		if min > i {
+			min = i
+		}
+	}
+	return
+}
+
+func (p *WebProcessorImpl) adfCriticalValue(dataLength float64, significance int) (criticalValue float64) {
+	coefficients := map[int][]float64{
+		1:  {-3.43035, -6.5393, -16.786, -79.433},
+		5:  {-2.86154, -2.8903, -4.234, -40.040},
+		10: {-2.56677, -1.5384, -2.809, -31.223},
+	}
+
+	chosenCoefficients := coefficients[significance]
+	criticalValue = chosenCoefficients[0] + chosenCoefficients[1]/dataLength + chosenCoefficients[2]/dataLength + chosenCoefficients[3]/dataLength
+	return
+}
+
+func (p *WebProcessorImpl) adfTest(originalData []float64) (bool, error) {
+	criticalValue := p.adfCriticalValue(float64(len(originalData)), 5)
+	var responseVectorAsSlice, designMatrixAsSlice []float64
+	for i := 0; i < len(originalData)-2; i++ {
+		responseVectorAsSlice = append(responseVectorAsSlice, originalData[i+2]-originalData[i+1])
+		designMatrixAsSlice = append(designMatrixAsSlice, 1)
+		designMatrixAsSlice = append(designMatrixAsSlice, originalData[i+1])
+		designMatrixAsSlice = append(designMatrixAsSlice, originalData[i+1]-originalData[i])
+	}
+	designMatrixRows, designMatrixCols := len(originalData)-2, 3
+
+	designMatrix := mat.NewDense(designMatrixRows, designMatrixCols, designMatrixAsSlice)
+	responseVector := mat.NewDense(designMatrixRows, 1, responseVectorAsSlice)
+	transposedDesignMatrix := designMatrix.T()
+	xtxMatrix := mat.NewDense(designMatrixCols, designMatrixCols, nil)
+	xtxMatrix.Mul(transposedDesignMatrix, designMatrix)
+	xtyMatrix := mat.NewDense(3, 1, nil)
+	xtyMatrix.Mul(transposedDesignMatrix, responseVector)
+
+	var inverseXtxMatrix mat.Dense
+	err := inverseXtxMatrix.Inverse(xtxMatrix)
+	if err != nil {
+		return false, err
+	}
+
+	olsResult := mat.NewDense(3, 1, nil)
+	olsResult.Mul(&inverseXtxMatrix, xtyMatrix)
+	olsData := olsResult.RawMatrix().Data
+	return criticalValue > olsData[1], nil
+}
+
+func (p *WebProcessorImpl) differencing(data []float64) (result []float64) {
+	for i := 0; i < len(data)-1; i++ {
+		result = append(result, data[i+1]-data[i])
+	}
+
+	return
+}
+
+func (p *WebProcessorImpl) vectorAutoregression(data [][]float64) ([]float64, error) {
+	var responseVectorAsSlice, designMatrixAsSlice []float64
+	for i := 0; i < len(data[0])-1; i++ {
+		designMatrixAsSlice = append(designMatrixAsSlice, 1)
+		for j := 0; j < len(data)-1; j++ {
+			designMatrixAsSlice = append(designMatrixAsSlice, data[j][i])
+			responseVectorAsSlice = append(responseVectorAsSlice, data[j][i+1])
+		}
+	}
+	designMatrixRows, designMatrixCols := len(data[0])-1, len(data)
+
+	designMatrix := mat.NewDense(designMatrixRows, designMatrixCols, designMatrixAsSlice)
+	responseVector := mat.NewDense(designMatrixRows, designMatrixCols-1, responseVectorAsSlice)
+	transposedDesignMatrix := designMatrix.T()
+	xtxMatrix := mat.NewDense(designMatrixCols, designMatrixCols, nil)
+	xtxMatrix.Mul(transposedDesignMatrix, designMatrix)
+	xtyMatrix := mat.NewDense(len(data), len(data)-1, nil)
+	xtyMatrix.Mul(transposedDesignMatrix, responseVector)
+
+	var inverseXtxMatrix mat.Dense
+	err := inverseXtxMatrix.Inverse(xtxMatrix)
+	if err != nil {
+		return nil, err
+	}
+
+	olsResult := mat.NewDense(len(data), len(data)-1, nil)
+	olsResult.Mul(&inverseXtxMatrix, xtyMatrix)
+	olsData := olsResult.RawMatrix().Data
+
+	var lastRowData []float64
+	for i := 0; i < len(data)-1; i++ {
+		lastRowData = append(lastRowData, data[i][len(data[i])-1])
+	}
+
+	var predictedValues []float64
+	for i := 0; i < len(data)-1; i++ {
+		predictedValues = append(predictedValues, olsData[i])
+		for j := 1; j < len(data); j++ {
+			index := i + (j * (len(data) - 1))
+			coefficient := olsData[index]
+			predictedValues[i] += coefficient * lastRowData[j-1]
+		}
+	}
+
+	return predictedValues, nil
+}
+
+func (p *WebProcessorImpl) knnClassification(dataPoints []float64, nasaData [][]float64, kValue int) (int, float64) {
+	var distances []float64
+	for i := 0; i < len(nasaData[0]); i++ {
+		var distance float64
+		for j := 0; j < len(nasaData)-1; j++ {
+			distance += math.Pow((nasaData[j][i] - dataPoints[j]), 2)
+		}
+		distance = math.Sqrt(distance)
+		distances = append(distances, distance)
+	}
+
+	indices := make([]int, len(distances))
+	for i := range indices {
+		indices[i] = i
+	}
+
+	sort.Slice(indices, func(i, j int) bool {
+		return distances[indices[i]] < distances[indices[j]]
+	})
+
+	sortedDistances := make([]float64, len(distances))
+	sortedFlood := make([]float64, len(nasaData[6]))
+
+	for i, idx := range indices {
+		sortedDistances[i] = distances[idx]
+		sortedFlood[i] = nasaData[6][idx]
+	}
+
+	var kScore float64
+	for i := 0; i < kValue; i++ {
+		kScore += sortedFlood[i]
+	}
+
+	result := 0
+	if kScore/float64(kValue) > 0.5 {
+		result = 1
+	}
+
+	return result, kScore / float64(kValue)
+}
+
+func matPrint(X mat.Matrix) {
+	fa := mat.Formatted(X, mat.Prefix(""), mat.Squeeze())
+	fmt.Printf("%v\n", fa)
 }
