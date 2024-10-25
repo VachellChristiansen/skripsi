@@ -96,7 +96,6 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 	latitude := strings.Split(latlong, "&")[0]
 	longitude := strings.Split(latlong, "&")[1]
 
-	p.logger.LogAndContinue("Preparing Nasa Data")
 	url := fmt.Sprintf("%s?start=%s&end=%s&latitude=%s&longitude=%s&%s", constant.NasaPowerAPIBaseURL, startDateRequest, endDateRequest, latitude, longitude, constant.NasaPowerAPIParams)
 	err = p.PrepareNasaCSV(url)
 	if err != nil {
@@ -106,7 +105,6 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 		})
 	}
 
-	p.logger.LogAndContinue("Preprocessing Nasa Data")
 	nasaData := [][]float64{}
 	nasaDataStr := [][]string{}
 	err = p.PreprocessNasaCSV(&nasaDataStr, &nasaData)
@@ -117,7 +115,6 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 		})
 	}
 
-	p.logger.LogAndContinue("Preprocessing BNPB Data")
 	bnpbData := [][]string{}
 	bnpbDataOri := [][]string{}
 	floodData := []float64{}
@@ -129,7 +126,6 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 		})
 	}
 
-	p.logger.LogAndContinue("Preparing Statistics from Data")
 	statisticData := []map[string]interface{}{}
 	err = p.PrepareStatistics(&bnpbData, &nasaDataStr, startDate, endDate, city, &statisticData)
 	if err != nil {
@@ -139,10 +135,8 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 		})
 	}
 
-	p.logger.LogAndContinue("Merging Nasa Data with Flood occurence")
 	nasaWithFloodDataStr := p.MergeNASAWithFlood(nasaDataStr, floodData)
 
-	p.logger.LogAndContinue("ADF Test and Differencing")
 	var stationaryNasaData [][]float64
 	stationaryDataMinLength := 99999
 	maxDifferencingStep := -99999
@@ -178,18 +172,16 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 		stationaryNasaData = append(stationaryNasaData, differencedNasaDataColumn)
 	}
 
-	p.logger.LogAndContinue("Uniforming data length after differencing")
 	var stationaryNasaWithFloodData [][]float64
 	for _, data := range stationaryNasaData {
 		differencedData := data
-		for i := 0; i < len(data)-stationaryDataMinLength; i++ {
+		for j := 0; j < len(data)-stationaryDataMinLength; j++ {
 			differencedData = p.differencing(data)
 		}
 		stationaryNasaWithFloodData = append(stationaryNasaWithFloodData, differencedData)
 	}
 	stationaryNasaWithFloodData = append(stationaryNasaWithFloodData, floodData[len(floodData)-stationaryDataMinLength:len(floodData)])
 
-	p.logger.LogAndContinue("Predicting Next Value with Vector Autoregression")
 	predictedValues, err := p.vectorAutoregression(stationaryNasaWithFloodData)
 	if err != nil {
 		return c.Render(http.StatusOK, "main", IndexData{
@@ -203,7 +195,6 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 		predictedValuesStr = append(predictedValuesStr, fmt.Sprintf("%0.4f", predictedValue))
 	}
 
-	p.logger.LogAndContinue("Performing KNN Classification")
 	knnResult, knnScore := p.knnClassification(predictedValues, stationaryNasaWithFloodData, kValue)
 
 	p.logger.LogAndContinue("Done Processing Request")
@@ -675,4 +666,22 @@ func (p *WebProcessorImpl) knnClassification(dataPoints []float64, nasaData [][]
 func matPrint(X mat.Matrix) {
 	fa := mat.Formatted(X, mat.Prefix(""), mat.Squeeze())
 	fmt.Printf("%v\n", fa)
+}
+
+func oneDimFloatToOneDimString(input []float64) (output []string) {
+	for i := 0; i < len(input); i++ {
+		output = append(output, fmt.Sprintf("%0.5f", input[i]))
+	}
+	return
+}
+
+func twoDimFloatToTwoDimString(input [][]float64) (output [][]string) {
+	for i := 0; i < len(input); i++ {
+		var tempStrSlice []string
+		for j := 0; j < len(input[i]); j++ {
+			tempStrSlice = append(tempStrSlice, fmt.Sprintf("%0.5f", input[i][j]))
+		}
+		output = append(output, tempStrSlice)
+	}
+	return
 }
