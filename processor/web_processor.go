@@ -190,6 +190,8 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 		})
 	}
 
+	_, rmseResult := p.evaluateVectorAutoregressionWithRMSE(stationaryNasaWithFloodData, 1.0, 4.0)
+
 	var predictedValuesStr []string
 	for _, predictedValue := range predictedValues {
 		predictedValuesStr = append(predictedValuesStr, fmt.Sprintf("%0.4f", predictedValue))
@@ -200,20 +202,22 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 	p.logger.LogAndContinue("Done Processing Request")
 	return c.Render(http.StatusOK, "main", IndexData{
 		Data: map[string]interface{}{
-			"NasaHeaders":      nasaDataStr[0],
-			"NasaStat":         nasaDataStr[1:6],
-			"NasaValues":       nasaDataStr[6:],
-			"NasaFloodHeaders": append(nasaDataStr[0], "FLOOD"),
-			"NasaFloodValues":  nasaWithFloodDataStr,
-			"BnpbHeaders":      bnpbData[0],
-			"BnpbValues":       bnpbData[1:],
-			"BnpbHeadersOri":   bnpbDataOri[0],
-			"BnpbValuesOri":    bnpbDataOri[1:],
-			"StatisticData":    statisticData,
-			"DifferencingStep": strconv.Itoa(maxDifferencingStep),
-			"PredictedValues":  predictedValuesStr,
-			"KNNResult":        strconv.Itoa(knnResult),
-			"KNNScore":         fmt.Sprintf("%0.5f", knnScore),
+			"NasaHeaders":           nasaDataStr[0],
+			"NasaStat":              nasaDataStr[1:6],
+			"NasaValues":            nasaDataStr[6:],
+			"NasaFloodHeaders":      append(nasaDataStr[0], "FLOOD"),
+			"NasaFloodValues":       nasaWithFloodDataStr,
+			"BnpbHeaders":           bnpbData[0],
+			"BnpbValues":            bnpbData[1:],
+			"BnpbHeadersOri":        bnpbDataOri[0],
+			"BnpbValuesOri":         bnpbDataOri[1:],
+			"RMSEEvaluationHeaders": rmseResult[0],
+			"RMSEEvaluationValues":  rmseResult[1:],
+			"StatisticData":         statisticData,
+			"DifferencingStep":      strconv.Itoa(maxDifferencingStep),
+			"PredictedValues":       predictedValuesStr,
+			"KNNResult":             strconv.Itoa(knnResult),
+			"KNNScore":              fmt.Sprintf("%0.5f", knnScore),
 		},
 		Message:    fmt.Sprintf("Preparation Done. Time Taken: %dms", time.Since(start).Milliseconds()),
 		StatusCode: http.StatusOK,
@@ -505,7 +509,7 @@ func (p *WebProcessorImpl) PrepareStatistics(bnpbData, nasaData *[][]string, sta
 }
 
 func (p *WebProcessorImpl) getMax(data []float64) (max float64) {
-	max = -999999
+	max = data[0]
 	for _, i := range data {
 		if max < i {
 			max = i
@@ -515,7 +519,7 @@ func (p *WebProcessorImpl) getMax(data []float64) (max float64) {
 }
 
 func (p *WebProcessorImpl) getMin(data []float64) (min float64) {
-	min = 999999
+	min = data[0]
 	for _, i := range data {
 		if min > i {
 			min = i
@@ -661,6 +665,51 @@ func (p *WebProcessorImpl) knnClassification(dataPoints []float64, nasaData [][]
 	}
 
 	return result, kScore / float64(kValue)
+}
+
+func (p *WebProcessorImpl) evaluateVectorAutoregressionWithRMSE(data [][]float64, start, stop float64) (result [][]float64, resultStr [][]string) {
+	var lengthSplit []int
+	for i := start; i < stop+1; i++ {
+		split := math.Floor(float64(len(data[0])) * ((100 - i*5) / 100))
+		lengthSplit = append(lengthSplit, int(split))
+	}
+
+	var dataRange []float64
+	for i := 0; i < len(data)-1; i++ {
+		dataRange = append(dataRange, p.getMax(data[i])-p.getMin(data[i]))
+	}
+
+	// Rolling VAR
+	for _, split := range lengthSplit {
+		mse := make([]float64, 6)
+		for j := split; j < len(data[0]); j++ {
+			var varData [][]float64
+			for k := 0; k < len(data); k++ {
+				varData = append(varData, data[k][:j])
+			}
+
+			varResult, _ := p.vectorAutoregression(varData)
+			for k := 0; k < len(varResult); k++ {
+				mse[k] += math.Pow(varResult[k]-data[k][j], 2)
+			}
+		}
+
+		for j := 0; j < len(mse); j++ {
+			mse[j] = math.Sqrt(mse[j]/float64(split)) / dataRange[j]
+		}
+		result = append(result, mse)
+	}
+
+	resultStr = append(resultStr, []string{"TRAIN-TEST-SPLIT", "WS10M", "RH2M", "PRECTOTCORR", "T2M", "T2M_MAX", "T2M_MIN"})
+
+	for i := 0; i < len(lengthSplit); i++ {
+		testLength := 5 * (i + 1)
+		trainLength := 100 - testLength
+		trainTest := fmt.Sprintf("%d-%d", trainLength, testLength)
+		strSlice := oneDimFloatToOneDimString(result[i])
+		resultStr = append(resultStr, []string{trainTest, strSlice[0], strSlice[1], strSlice[2], strSlice[3], strSlice[4], strSlice[5]})
+	}
+	return
 }
 
 func matPrint(X mat.Matrix) {
