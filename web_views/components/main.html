@@ -1,7 +1,7 @@
 {{ define "main" }}
 <main class="w-full h-full my-2 flex-1 flex justify-center overflow-auto">
     <div class="max-w-[600px] md:max-w-[750px] lg:max-w-[1000px] xl:max-w-[1250px] w-full h-full px-4 md:px-0">
-        <div x-data="{ message: true }" class="relative w-full h-full">
+        <div x-data="{ message: true, tableView: false, tableInitialized: false }" class="relative w-full h-full">
             <div id="test" class="w-full h-full flex flex-col gap-2">
                 <form class="w-full pt-2 flex justify-around">
                     <div class="flex gap-2 items-center">
@@ -131,7 +131,7 @@
                         </div>
                     </div>
                     <div x-show="showing === 'evaluationResult'" class="w-full h-full overflow-auto">
-                        <div class="w-full h-full overflow-x-auto">
+                        <div x-show="!tableView" class="w-full h-full overflow-x-auto">
                             <table class="min-w-full table-auto border-collapse">
                                 <thead class="bg-gray-200">
                                 <tr>
@@ -151,6 +151,9 @@
                                 </tbody>
                             </table>
                         </div>
+                        <div x-show="tableView" class="w-full h-full overflow-x-auto">
+                            <canvas id="rmseTable" width="400" height="400"></canvas>
+                        </div>
                     </div>
                     <div x-show="showing === 'result'" class="w-full h-full overflow-auto">
                         <div class="w-full h-full overflow-x-auto">
@@ -168,6 +171,8 @@
                             <button @click="showing = 'nasaFlood'" class="p-2 rounded-lg border-2 hover:brightness-75 active:brightness-50">NASA DATA WITH FLOOD</button>
                             <button @click="showing = 'evaluationResult'" class="p-2 rounded-lg border-2 hover:brightness-75 active:brightness-50">EVALUATION RESULT</button>
                             <button @click="showing = 'result'" class="p-2 rounded-lg border-2 hover:brightness-75 active:brightness-50">RESULT</button>
+                            <button x-show="tableView == false" @click="tableView = true; console.log('Rawr'); if (!tableInitialized) { injectData(); tableInitialized = true; }" class="p-2 rounded-lg border-2 bg-emerald-200 hover:brightness-75 active:brightness-50">ENABLE TABLE VIEW</button>
+                            <button x-show="tableView == true" @click="tableView = false; console.log('Ruwr');" class="p-2 rounded-lg border-2 bg-rose-200 hover:brightness-75 active:brightness-50">DISABLE TABLE VIEW</button>
                         </div>
                         <div class="w-full p-2 border-2 rounded-md">
                             {{ range .Data.StatisticData }}
@@ -193,5 +198,12 @@
             </div>
         </div>
     </div>
+    <script src="/static/js/data.js?v={{ .Timestamp }}"></script>
+    <script>
+        function injectData() {
+            const data = JSON.parse(`{{ .JSData }}`)
+            initializeChart(data)
+        }
+    </script>
 </main>
 {{ end }}

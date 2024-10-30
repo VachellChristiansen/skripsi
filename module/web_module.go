@@ -1,6 +1,7 @@
 package module
 
 import (
+	"fmt"
 	"os"
 	"skripsi/helper"
 	"skripsi/processor"
@@ -49,5 +50,5 @@ func (m *WebModuleImpl) Init() {
 }
 
 func (m *WebModuleImpl) Serve() {
-	m.e.Start(":49991")
+	m.e.Start(fmt.Sprintf(":%s", os.Getenv("WEB_PORT")))
 }

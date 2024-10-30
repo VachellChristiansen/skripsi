@@ -33,11 +33,16 @@ func TruncateTime(datetime string) string {
 	return parts[0]
 }
 
+func SafeJS(s string) template.JS {
+	return template.JS(s)
+}
+
 func NewTemplate() *Template {
 	funcMap := template.FuncMap{
 		"Repeat":       Repeat,
 		"ReplaceAll":   ReplaceAll,
 		"TruncateTime": TruncateTime,
+		"SafeJS":       SafeJS,
 	}
 	wd, err := os.Getwd()
 	if err != nil {

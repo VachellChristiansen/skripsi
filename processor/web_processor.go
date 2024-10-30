@@ -3,6 +3,7 @@ package processor
 import (
 	"bufio"
 	"encoding/csv"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -190,7 +191,7 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 		})
 	}
 
-	_, rmseResult := p.evaluateVectorAutoregressionWithRMSE(stationaryNasaWithFloodData, 1.0, 4.0)
+	_, rmseResult := p.evaluateVectorAutoregressionWithRMSE(stationaryNasaWithFloodData, 1.0, 6.0)
 
 	var predictedValuesStr []string
 	for _, predictedValue := range predictedValues {
@@ -200,25 +201,35 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 	knnResult, knnScore := p.knnClassification(predictedValues, stationaryNasaWithFloodData, kValue)
 
 	p.logger.LogAndContinue("Done Processing Request")
+	viewData := map[string]interface{}{
+		"NasaHeaders":           nasaDataStr[0],
+		"NasaStat":              nasaDataStr[1:6],
+		"NasaValues":            nasaDataStr[6:],
+		"NasaFloodHeaders":      append(nasaDataStr[0], "FLOOD"),
+		"NasaFloodValues":       nasaWithFloodDataStr,
+		"BnpbHeaders":           bnpbData[0],
+		"BnpbValues":            bnpbData[1:],
+		"BnpbHeadersOri":        bnpbDataOri[0],
+		"BnpbValuesOri":         bnpbDataOri[1:],
+		"RMSEEvaluationHeaders": rmseResult[0],
+		"RMSEEvaluationValues":  rmseResult[1:],
+		"StatisticData":         statisticData,
+		"DifferencingStep":      strconv.Itoa(maxDifferencingStep),
+		"PredictedValues":       predictedValuesStr,
+		"KNNResult":             strconv.Itoa(knnResult),
+		"KNNScore":              fmt.Sprintf("%0.5f", knnScore),
+	}
+	jsData, err := json.Marshal(viewData)
+	if err != nil {
+		return c.Render(http.StatusOK, "main", IndexData{
+			Err:        fmt.Sprintf("Marshaling data into json fails, %s", err.Error()),
+			StatusCode: http.StatusInternalServerError,
+		})
+	}
+
 	return c.Render(http.StatusOK, "main", IndexData{
-		Data: map[string]interface{}{
-			"NasaHeaders":           nasaDataStr[0],
-			"NasaStat":              nasaDataStr[1:6],
-			"NasaValues":            nasaDataStr[6:],
-			"NasaFloodHeaders":      append(nasaDataStr[0], "FLOOD"),
-			"NasaFloodValues":       nasaWithFloodDataStr,
-			"BnpbHeaders":           bnpbData[0],
-			"BnpbValues":            bnpbData[1:],
-			"BnpbHeadersOri":        bnpbDataOri[0],
-			"BnpbValuesOri":         bnpbDataOri[1:],
-			"RMSEEvaluationHeaders": rmseResult[0],
-			"RMSEEvaluationValues":  rmseResult[1:],
-			"StatisticData":         statisticData,
-			"DifferencingStep":      strconv.Itoa(maxDifferencingStep),
-			"PredictedValues":       predictedValuesStr,
-			"KNNResult":             strconv.Itoa(knnResult),
-			"KNNScore":              fmt.Sprintf("%0.5f", knnScore),
-		},
+		Data:       viewData,
+		JSData:     string(jsData),
 		Message:    fmt.Sprintf("Preparation Done. Time Taken: %dms", time.Since(start).Milliseconds()),
 		StatusCode: http.StatusOK,
 	})
@@ -502,7 +513,7 @@ func (p *WebProcessorImpl) PrepareStatistics(bnpbData, nasaData *[][]string, sta
 	stats = append(stats, map[string]interface{}{"DayCount": int(endDate.Sub(startDate).Hours()/24) + 1})
 	stats = append(stats, map[string]interface{}{"DataCount": len(*nasaData) - 6})
 	stats = append(stats, map[string]interface{}{"FloodCount": len(*bnpbData) - 1})
-	stats = append(stats, map[string]interface{}{"FloodPercentage": float64((float64(len(*bnpbData)) - 1) / (float64(len(*nasaData)) - 1) * 100)})
+	stats = append(stats, map[string]interface{}{"FloodPercentage": fmt.Sprintf("%0.3f%s", float64((float64(len(*bnpbData)) - 1) / (float64(len(*nasaData)) - 1) * 100), "%")})
 
 	*statisticData = stats
 	return nil
