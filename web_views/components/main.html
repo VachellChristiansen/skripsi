@@ -3,7 +3,7 @@
     <div class="max-w-[600px] md:max-w-[750px] lg:max-w-[1000px] xl:max-w-[1250px] w-full h-full px-4 md:px-0">
         <div x-data="{ message: true, tableView: false, tableInitialized: false }" class="relative w-full h-full">
             <div id="test" class="w-full h-full flex flex-col gap-2">
-                <form class="w-full pt-2 flex justify-around">
+                <form class="w-full pt-2 flex justify-between">
                     <div class="flex gap-2 items-center">
                         <label for="start_date">Start Date</label>
                         <input class="p-1 bg-stone-300" type="date" id="start_date" name="start_date" min="2008-01-01" max="2024-09-30">
@@ -35,8 +35,39 @@
                 </form>
                 {{ if .Data }}
                 <div x-data="{ showing: 'nasa' }" class="w-full flex-1 flex gap-4 overflow-auto">
-                    <div x-show="showing === 'nasa'" class="w-full h-full overflow-auto">
-                        <div class="w-full h-full overflow-x-auto">
+                    <div x-show="showing === 'nasa'" class="w-full h-full flex flex-col gap-6">
+                        <div class="flex flex-col gap-4">
+                            <h1 class="text-2xl font-bold">NASA/POWER CERES/MERRA2 Daily Data Summary</h1>
+                            
+                            <div x-show="!tableView" class="flex flex-col gap-2">
+                                <h2 class="text-xl font-semibold">Date Range</h2>
+                                <p>Data available from <strong>{{ .Data.StartDate }}</strong> through <strong>{{ .Data.EndDate }}</strong>.</p>
+                            </div>
+                            
+                            <div x-show="!tableView" class="flex flex-col gap-2">
+                                <h2 class="text-xl font-semibold">Location Details</h2>
+                                <p><strong>Latitude:</strong> {{ .Data.Latitude }}</p>
+                                <p><strong>Longitude:</strong> {{ .Data.Longitude }}</p>
+                            </div>
+                            
+                            <div x-show="!tableView" class="flex flex-col gap-2">
+                                <h2 class="text-xl font-semibold">Missing Data</h2>
+                                <p>For data points that are unavailable or outside the source's range, the placeholder value is <strong>-999</strong>.</p>
+                            </div>
+                            
+                            <div class="flex flex-col gap-2">
+                                <h2 class="text-xl font-semibold">Parameters</h2>
+                                <ul class="list-disc list-inside">
+                                    <li><strong>RH2M:</strong> Relative Humidity at 2 Meters (%)</li>
+                                    <li><strong>T2M:</strong> Temperature at 2 Meters (°C)</li>
+                                    <li><strong>WS10M:</strong> Wind Speed at 10 Meters (m/s)</li>
+                                    <li><strong>PRECTOTCORR:</strong> Corrected Precipitation (mm/day)</li>
+                                    <li><strong>T2M_MAX:</strong> Maximum Temperature at 2 Meters (°C)</li>
+                                    <li><strong>T2M_MIN:</strong> Minimum Temperature at 2 Meters (°C)</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div x-show="!tableView" class="w-full h-full overflow-x-auto">
                             <table class="min-w-full h-full table-auto border-collapse">
                                 <thead>
                                 <tr>
@@ -63,8 +94,19 @@
                                 </tbody>
                             </table>
                         </div>
+                        <div x-show="tableView" class="w-full h-full overflow-x-auto">
+                            <canvas id="nasaTable"></canvas>
+                        </div>
                     </div>
-                    <div x-show="showing === 'bnpb'" class="w-full h-full overflow-auto">
+                    <div x-show="showing === 'bnpb'" class="w-full h-full flex flex-col gap-6 overflow-auto">
+                        <div class="flex flex-col gap-4">
+                            <h1 class="text-2xl font-bold">BNPB Flood Occurence Data</h1>
+                            
+                            <div class="flex flex-col gap-2">
+                                <h2 class="text-xl font-semibold">Data Composition</h2>
+                                <p>Each Entry represents the occurence of flood for chosen <strong>City</strong> and <strong>Date Range</strong>.</p>
+                            </div>
+                        </div>
                         <div class="w-full h-full overflow-x-auto">
                             <table class="min-w-full table-auto border-collapse">
                                 <thead class="bg-gray-200">
@@ -86,7 +128,16 @@
                             </table>
                         </div>
                     </div>
-                    <div x-show="showing === 'bnpbOri'" class="w-full h-full overflow-auto">
+                    <div x-show="showing === 'bnpbOri'" class="w-full h-full flex flex-col gap-6 overflow-auto">
+                        <div class="flex flex-col gap-4">
+                            <h1 class="text-2xl font-bold">BNPB Flood Recordings Data</h1>
+                            
+                            <div class="flex flex-col gap-2">
+                                <h2 class="text-xl font-semibold">Data Composition</h2>
+                                <p>Each Entry represents the occurence of flood within the chosen <strong>City</strong> and <strong>Date Range</strong>.</p>
+                                <p>Details for each entry is shown as is from the <strong>Original Data Source</strong>.</p>
+                            </div>
+                        </div>
                         <div class="w-full h-full overflow-x-auto">
                             <table class="min-w-full table-auto border-collapse">
                                 <thead class="bg-gray-200">
@@ -108,7 +159,23 @@
                             </table>
                         </div>
                     </div>
-                    <div x-show="showing === 'nasaFlood'" class="w-full h-full overflow-auto">
+                    <div x-show="showing === 'nasaFlood'" class="w-full h-full flex flex-col gap-6 overflow-auto">
+                        <div class="flex flex-col gap-4">
+                            <h1 class="text-2xl font-bold">Paired NASA Weather Parameter Data and BNPB Flood Recordings Data</h1>
+                            
+                            <div class="flex flex-col gap-2">
+                                <h2 class="text-xl font-semibold">Parameters</h2>
+                                <ul class="list-disc list-inside">
+                                    <li><strong>RH2M:</strong> Relative Humidity at 2 Meters (%)</li>
+                                    <li><strong>T2M:</strong> Temperature at 2 Meters (°C)</li>
+                                    <li><strong>WS10M:</strong> Wind Speed at 10 Meters (m/s)</li>
+                                    <li><strong>PRECTOTCORR:</strong> Corrected Precipitation (mm/day)</li>
+                                    <li><strong>T2M_MAX:</strong> Maximum Temperature at 2 Meters (°C)</li>
+                                    <li><strong>T2M_MIN:</strong> Minimum Temperature at 2 Meters (°C)</li>
+                                    <li><strong>FLOOD:</strong> Flood Occurence at Date</li>
+                                </ul>
+                            </div>
+                        </div>
                         <div class="w-full h-full overflow-x-auto">
                             <table class="min-w-full table-auto border-collapse">
                                 <thead class="bg-gray-200">
@@ -130,18 +197,33 @@
                             </table>
                         </div>
                     </div>
-                    <div x-show="showing === 'evaluationResult'" class="w-full h-full overflow-auto">
+                    <div x-show="showing === 'evaluationResult'" class="w-full h-full flex flex-col gap-6 overflow-auto">
+                        <div class="flex flex-col gap-4">
+                            <h1 class="text-2xl font-bold">Normalized RMSE Evaluation for VAR Prediction</h1>
+                            
+                            <div class="flex flex-col gap-2">
+                                <h2 class="text-xl font-semibold">Parameters</h2>
+                                <ul class="list-disc list-inside">
+                                    <li><strong>RH2M:</strong> Relative Humidity at 2 Meters (%)</li>
+                                    <li><strong>T2M:</strong> Temperature at 2 Meters (°C)</li>
+                                    <li><strong>WS10M:</strong> Wind Speed at 10 Meters (m/s)</li>
+                                    <li><strong>PRECTOTCORR:</strong> Corrected Precipitation (mm/day)</li>
+                                    <li><strong>T2M_MAX:</strong> Maximum Temperature at 2 Meters (°C)</li>
+                                    <li><strong>T2M_MIN:</strong> Minimum Temperature at 2 Meters (°C)</li>
+                                </ul>
+                            </div>
+                        </div>
                         <div x-show="!tableView" class="w-full h-full overflow-x-auto">
                             <table class="min-w-full table-auto border-collapse">
                                 <thead class="bg-gray-200">
                                 <tr>
-                                    {{ range .Data.RMSEEvaluationHeaders }}
+                                    {{ range .Data.NRMSEEvaluationHeaders }}
                                     <th class="px-4 py-2 sticky top-0 bg-stone-300">{{ . }}</th>
                                     {{ end }}
                                 </tr>
                                 </thead>
                                 <tbody>
-                                    {{ range .Data.RMSEEvaluationValues }}
+                                    {{ range .Data.NRMSEEvaluationValues }}
                                     <tr>
                                         {{ range . }}
                                         <td class="border px-4 py-2">{{ . }}</td>
@@ -152,7 +234,7 @@
                             </table>
                         </div>
                         <div x-show="tableView" class="w-full h-full overflow-x-auto">
-                            <canvas id="rmseTable" width="400" height="400"></canvas>
+                            <canvas id="nrmseTable"></canvas>
                         </div>
                     </div>
                     <div x-show="showing === 'result'" class="w-full h-full overflow-auto">
@@ -160,7 +242,6 @@
                             <p>Max Differencing Step: {{ .Data.DifferencingStep }}</p>
                             <p>Predicted Values: {{ range .Data.PredictedValues }} [{{ . }}] {{ end }}</p>
                             <p>KNN Classification Result: {{ .Data.KNNResult }}</p>
-                            <p>KNN Classification Score: {{ .Data.KNNScore }}</p>
                         </div>
                     </div>
                     <div class="w-1/4 h-full flex flex-col justify-between">

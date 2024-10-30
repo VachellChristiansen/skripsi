@@ -191,33 +191,43 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 		})
 	}
 
-	_, rmseResult := p.evaluateVectorAutoregressionWithRMSE(stationaryNasaWithFloodData, 1.0, 6.0)
+	_, nrmseResult := p.evaluateVectorAutoregressionWithNRMSE(stationaryNasaWithFloodData, 1.0, 6.0)
 
 	var predictedValuesStr []string
-	for _, predictedValue := range predictedValues {
-		predictedValuesStr = append(predictedValuesStr, fmt.Sprintf("%0.4f", predictedValue))
+	for i, predictedValue := range predictedValues {
+		predictedValuesStr = append(predictedValuesStr, fmt.Sprintf("%s: %0.4f", nasaDataStr[0][i+1], predictedValue))
 	}
 
-	knnResult, knnScore := p.knnClassification(predictedValues, stationaryNasaWithFloodData, kValue)
+	knnResult, _ := p.knnClassification(predictedValues, stationaryNasaWithFloodData, kValue)
+	flood := "No Flood"
+	if knnResult == 0 {
+		flood = "Flood"
+	} else {
+		flood = "No Flood"
+	}
 
 	p.logger.LogAndContinue("Done Processing Request")
 	viewData := map[string]interface{}{
-		"NasaHeaders":           nasaDataStr[0],
-		"NasaStat":              nasaDataStr[1:6],
-		"NasaValues":            nasaDataStr[6:],
-		"NasaFloodHeaders":      append(nasaDataStr[0], "FLOOD"),
-		"NasaFloodValues":       nasaWithFloodDataStr,
-		"BnpbHeaders":           bnpbData[0],
-		"BnpbValues":            bnpbData[1:],
-		"BnpbHeadersOri":        bnpbDataOri[0],
-		"BnpbValuesOri":         bnpbDataOri[1:],
-		"RMSEEvaluationHeaders": rmseResult[0],
-		"RMSEEvaluationValues":  rmseResult[1:],
-		"StatisticData":         statisticData,
-		"DifferencingStep":      strconv.Itoa(maxDifferencingStep),
-		"PredictedValues":       predictedValuesStr,
-		"KNNResult":             strconv.Itoa(knnResult),
-		"KNNScore":              fmt.Sprintf("%0.5f", knnScore),
+		"NasaHeaders":            nasaDataStr[0],
+		"NasaStat":               nasaDataStr[1:6],
+		"NasaValues":             nasaDataStr[6:],
+		"NasaFloodHeaders":       append(nasaDataStr[0], "FLOOD"),
+		"NasaFloodValues":        nasaWithFloodDataStr,
+		"BnpbHeaders":            bnpbData[0],
+		"BnpbValues":             bnpbData[1:],
+		"BnpbHeadersOri":         bnpbDataOri[0],
+		"BnpbValuesOri":          bnpbDataOri[1:],
+		"NRMSEEvaluationHeaders": nrmseResult[0],
+		"NRMSEEvaluationValues":  nrmseResult[1:],
+		"StatisticData":          statisticData,
+		"StartDate":              startDate.Format("2006/01/02"),
+		"EndDate":                endDate.Format("2006/01/02"),
+		"Latitude":               latitude,
+		"Longitude":              longitude,
+		"DifferencingStep":       strconv.Itoa(maxDifferencingStep),
+		"PredictedValues":        predictedValuesStr,
+		"KNNResult":              flood,
+		"Timestamp":              time.Now().Unix(),
 	}
 	jsData, err := json.Marshal(viewData)
 	if err != nil {
@@ -513,7 +523,7 @@ func (p *WebProcessorImpl) PrepareStatistics(bnpbData, nasaData *[][]string, sta
 	stats = append(stats, map[string]interface{}{"DayCount": int(endDate.Sub(startDate).Hours()/24) + 1})
 	stats = append(stats, map[string]interface{}{"DataCount": len(*nasaData) - 6})
 	stats = append(stats, map[string]interface{}{"FloodCount": len(*bnpbData) - 1})
-	stats = append(stats, map[string]interface{}{"FloodPercentage": fmt.Sprintf("%0.3f%s", float64((float64(len(*bnpbData)) - 1) / (float64(len(*nasaData)) - 1) * 100), "%")})
+	stats = append(stats, map[string]interface{}{"FloodPercentage": fmt.Sprintf("%0.3f%s", float64((float64(len(*bnpbData))-1)/(float64(len(*nasaData))-1)*100), "%")})
 
 	*statisticData = stats
 	return nil
@@ -678,7 +688,7 @@ func (p *WebProcessorImpl) knnClassification(dataPoints []float64, nasaData [][]
 	return result, kScore / float64(kValue)
 }
 
-func (p *WebProcessorImpl) evaluateVectorAutoregressionWithRMSE(data [][]float64, start, stop float64) (result [][]float64, resultStr [][]string) {
+func (p *WebProcessorImpl) evaluateVectorAutoregressionWithNRMSE(data [][]float64, start, stop float64) (result [][]float64, resultStr [][]string) {
 	var lengthSplit []int
 	for i := start; i < stop+1; i++ {
 		split := math.Floor(float64(len(data[0])) * ((100 - i*5) / 100))
