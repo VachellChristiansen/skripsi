@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"golang.org/x/exp/rand"
 	"gonum.org/v1/gonum/mat"
 )
 
@@ -51,8 +52,14 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 	}
 	// Begin Validation
 	startDate, err := time.Parse("2006-01-02", c.FormValue("start_date"))
+	if err != nil {
+		return c.Render(http.StatusOK, "main", IndexData{
+			Err:        "Parsing Date Error",
+			StatusCode: http.StatusBadRequest,
+			Timestamp:  time.Now().Unix(),
+		})
+	}
 	endDate, err := time.Parse("2006-01-02", c.FormValue("end_date"))
-	city := c.FormValue("city")
 	if err != nil {
 		return c.Render(http.StatusOK, "main", IndexData{
 			Err:        "Parsing Date Error",
@@ -61,6 +68,7 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 		})
 	}
 
+	city := c.FormValue("city")
 	if startDate.After(endDate) {
 		return c.Render(http.StatusOK, "main", IndexData{
 			Err:        "Start Date can't be later than End Date",
@@ -79,6 +87,21 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 	if kValue <= 0 || kValue > 500 {
 		return c.Render(http.StatusOK, "main", IndexData{
 			Err:        "Chosen K Value is not Valid (Must be 1 - 500)",
+			StatusCode: http.StatusUnprocessableEntity,
+		})
+	}
+
+	smoteK, err := strconv.Atoi(c.FormValue("smote_k"))
+	if err != nil {
+		return c.Render(http.StatusOK, "main", IndexData{
+			Err:        "SMOET K Value is not a valid number",
+			StatusCode: http.StatusUnprocessableEntity,
+		})
+	}
+
+	if smoteK <= 0 || smoteK > 10 {
+		return c.Render(http.StatusOK, "main", IndexData{
+			Err:        "Chosen SMOTE K Value is not Valid (Must be 1 - 10)",
 			StatusCode: http.StatusUnprocessableEntity,
 		})
 	}
@@ -128,21 +151,17 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 	}
 
 	statisticData := []map[string]interface{}{}
-	err = p.PrepareStatistics(&bnpbData, &nasaDataStr, startDate, endDate, city, &statisticData)
-	if err != nil {
-		return c.Render(http.StatusOK, "main", IndexData{
-			Err:        fmt.Sprintf("Processing Statistic fails, %s", err.Error()),
-			StatusCode: http.StatusInternalServerError,
-		})
-	}
+	p.PrepareStatistics(&bnpbData, &nasaDataStr, startDate, endDate, city, &statisticData)
 
 	nasaWithFloodDataStr := p.MergeNASAWithFlood(nasaDataStr, floodData)
 
 	var stationaryNasaData [][]float64
 	stationaryDataMinLength := 99999
 	maxDifferencingStep := -99999
+	criticalValues := make([]float64, 6)
+	adfScores := make([]float64, 6)
 	for i := 0; i < len(nasaData); i++ {
-		stationary, err := p.adfTest(nasaData[i])
+		stationary, criticalValue, adfScore, err := p.adfTest(nasaData[i])
 		if err != nil {
 			return c.Render(http.StatusOK, "main", IndexData{
 				Err:        fmt.Sprintf("Processing ADF test fails, %s", err.Error()),
@@ -155,7 +174,7 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 		for !stationary {
 			differencingStep++
 			differencedNasaDataColumn = p.differencing(differencedNasaDataColumn)
-			stationary, err = p.adfTest(differencedNasaDataColumn)
+			stationary, criticalValue, adfScore, err = p.adfTest(differencedNasaDataColumn)
 			if err != nil {
 				return c.Render(http.StatusOK, "main", IndexData{
 					Err:        fmt.Sprintf("Processing ADF test fails, %s", err.Error()),
@@ -170,19 +189,38 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 		if stationaryDataMinLength > len(differencedNasaDataColumn) {
 			stationaryDataMinLength = len(differencedNasaDataColumn)
 		}
+
+		criticalValues[i] = criticalValue
+		adfScores[i] = adfScore
 		stationaryNasaData = append(stationaryNasaData, differencedNasaDataColumn)
 	}
 
 	var stationaryNasaWithFloodData [][]float64
-	for _, data := range stationaryNasaData {
+	for i, data := range stationaryNasaData {
 		differencedData := data
+		update := false
+		var criticalValue, adfScore float64
 		for j := 0; j < len(data)-stationaryDataMinLength; j++ {
 			differencedData = p.differencing(data)
+			_, criticalValue, adfScore, err = p.adfTest(differencedData)
+			if err != nil {
+				return c.Render(http.StatusOK, "main", IndexData{
+					Err:        fmt.Sprintf("Processing ADF test fails, %s", err.Error()),
+					StatusCode: http.StatusInternalServerError,
+				})
+			}
+			update = true
+		}
+		if update {
+			criticalValues[i] = criticalValue
+			adfScores[i] = adfScore
 		}
 		stationaryNasaWithFloodData = append(stationaryNasaWithFloodData, differencedData)
 	}
-	stationaryNasaWithFloodData = append(stationaryNasaWithFloodData, floodData[len(floodData)-stationaryDataMinLength:len(floodData)])
+	stationaryNasaWithFloodData = append(stationaryNasaWithFloodData, floodData[len(floodData)-stationaryDataMinLength:])
 
+	var stationaryStatisticData []map[string]interface{}
+	p.PrepareDifferencedStatistics(stationaryNasaWithFloodData, startDate, endDate, city, &stationaryStatisticData)
 	predictedValues, err := p.vectorAutoregression(stationaryNasaWithFloodData)
 	if err != nil {
 		return c.Render(http.StatusOK, "main", IndexData{
@@ -192,42 +230,77 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 	}
 
 	_, nrmseResult := p.evaluateVectorAutoregressionWithNRMSE(stationaryNasaWithFloodData, 1.0, 6.0)
+	stationaryNasaWithFloodDataStr := twoDimFloatToTwoDimString(transpose(stationaryNasaWithFloodData))
 
 	var predictedValuesStr []string
-	for i, predictedValue := range predictedValues {
-		predictedValuesStr = append(predictedValuesStr, fmt.Sprintf("%s: %0.4f", nasaDataStr[0][i+1], predictedValue))
+	for _, predictedValue := range predictedValues {
+		predictedValuesStr = append(predictedValuesStr, fmt.Sprintf("%0.4f", predictedValue))
 	}
 
-	knnResult, _ := p.knnClassification(predictedValues, stationaryNasaWithFloodData, kValue)
+	knnResult, nearestData, nearestDistances := p.knnClassification(predictedValues, stationaryNasaWithFloodData, kValue)
 	flood := "No Flood"
-	if knnResult == 0 {
+	if knnResult == 1 {
 		flood = "Flood"
-	} else {
-		flood = "No Flood"
 	}
+
+	knnData := nearestData[:len(nearestData)-1]
+	knnData = append(knnData, nearestDistances)
+	knnDataStr := twoDimFloatToTwoDimString(transpose(knnData))
+
+	minoritySample := p.getMinoritySample(stationaryNasaWithFloodData)
+	_, smoteReplacedData := p.smoteReplaceMethod(minoritySample, stationaryNasaWithFloodData, smoteK)
+
+	var smoteStatisticData []map[string]interface{}
+	p.PrepareDifferencedStatistics(smoteReplacedData, startDate, endDate, city, &smoteStatisticData)
+
+	knnResultSmoteReplace, nearestDataSmoteReplace, nearestDistancesSmoteReplace := p.knnClassification(predictedValues, smoteReplacedData, kValue)
+	floodSmoteReplace := "No Flood"
+	if knnResultSmoteReplace == 1 {
+		floodSmoteReplace = "Flood"
+	}
+
+	knnDataSmoteReplace := nearestDataSmoteReplace[:len(nearestDataSmoteReplace)-1]
+	knnDataSmoteReplace = append(knnDataSmoteReplace, nearestDistancesSmoteReplace)
+	knnDataSmoteReplaceStr := twoDimFloatToTwoDimString(transpose(knnDataSmoteReplace))
+	smoteDataStr := twoDimFloatToTwoDimString(transpose(smoteReplacedData))
+
+	findDifference(stationaryNasaWithFloodData, smoteReplacedData)
 
 	p.logger.LogAndContinue("Done Processing Request")
 	viewData := map[string]interface{}{
-		"NasaHeaders":            nasaDataStr[0],
-		"NasaStat":               nasaDataStr[1:6],
-		"NasaValues":             nasaDataStr[6:],
-		"NasaFloodHeaders":       append(nasaDataStr[0], "FLOOD"),
-		"NasaFloodValues":        nasaWithFloodDataStr,
-		"BnpbHeaders":            bnpbData[0],
-		"BnpbValues":             bnpbData[1:],
-		"BnpbHeadersOri":         bnpbDataOri[0],
-		"BnpbValuesOri":          bnpbDataOri[1:],
-		"NRMSEEvaluationHeaders": nrmseResult[0],
-		"NRMSEEvaluationValues":  nrmseResult[1:],
-		"StatisticData":          statisticData,
-		"StartDate":              startDate.Format("2006/01/02"),
-		"EndDate":                endDate.Format("2006/01/02"),
-		"Latitude":               latitude,
-		"Longitude":              longitude,
-		"DifferencingStep":       strconv.Itoa(maxDifferencingStep),
-		"PredictedValues":        predictedValuesStr,
-		"KNNResult":              flood,
-		"Timestamp":              time.Now().Unix(),
+		"NasaHeaders":                nasaDataStr[0],
+		"NasaStat":                   nasaDataStr[1:6],
+		"NasaValues":                 nasaDataStr[6:],
+		"NasaFloodHeaders":           append(nasaDataStr[0], "FLOOD"),
+		"NasaFloodValues":            nasaWithFloodDataStr,
+		"BnpbHeaders":                bnpbData[0],
+		"BnpbValues":                 bnpbData[1:],
+		"BnpbHeadersOri":             bnpbDataOri[0],
+		"BnpbValuesOri":              bnpbDataOri[1:],
+		"NRMSEEvaluationHeaders":     nrmseResult[0],
+		"NRMSEEvaluationValues":      nrmseResult[1:],
+		"ADFWithParam":               pairAdfWithParam(criticalValues, adfScores),
+		"StationaryDataHeaders":      []string{"WS10M", "RH2M", "PRECTOTCORR", "T2M", "T2M_MAX", "T2M_MIN", "FLOOD"},
+		"StationaryDataValues":       stationaryNasaWithFloodDataStr,
+		"SmoteDataHeaders":           []string{"WS10M", "RH2M", "PRECTOTCORR", "T2M", "T2M_MAX", "T2M_MIN", "FLOOD"},
+		"SmoteDataValues":            smoteDataStr,
+		"StatisticData":              statisticData,
+		"StationaryStatisticData":    stationaryStatisticData,
+		"SmoteStatisticData":         smoteStatisticData,
+		"StartDate":                  startDate.Format("2006/01/02"),
+		"EndDate":                    endDate.Format("2006/01/02"),
+		"Latitude":                   latitude,
+		"Longitude":                  longitude,
+		"DifferencingStep":           strconv.Itoa(maxDifferencingStep),
+		"PredictedHeaders":           []string{"WS10M", "RH2M", "PRECTOTCORR", "T2M", "T2M_MAX", "T2M_MIN"},
+		"PredictedValues":            predictedValuesStr,
+		"KNNResult":                  flood,
+		"KNNDataHeaders":             []string{"WS10M", "RH2M", "PRECTOTCORR", "T2M", "T2M_MAX", "T2M_MIN", "FLOOD", "DISTANCE"},
+		"KNNDataValues":              knnDataStr,
+		"KNNResultSmoteReplace":      floodSmoteReplace,
+		"KNNDataHeadersSmoteReplace": []string{"WS10M", "RH2M", "PRECTOTCORR", "T2M", "T2M_MAX", "T2M_MIN", "FLOOD", "DISTANCE"},
+		"KNNDataValuesSmoteReplace":  knnDataSmoteReplaceStr,
+		"Timestamp":                  time.Now().Unix(),
 	}
 	jsData, err := json.Marshal(viewData)
 	if err != nil {
@@ -515,7 +588,7 @@ func (p *WebProcessorImpl) MergeNASAWithFlood(nasaDataStr [][]string, floodData 
 	return
 }
 
-func (p *WebProcessorImpl) PrepareStatistics(bnpbData, nasaData *[][]string, startDate, endDate time.Time, city string, statisticData *[]map[string]interface{}) error {
+func (p *WebProcessorImpl) PrepareStatistics(bnpbData, nasaData *[][]string, startDate, endDate time.Time, city string, statisticData *[]map[string]interface{}) {
 	stats := []map[string]interface{}{}
 	stats = append(stats, map[string]interface{}{"StartDate": startDate.Format("2006/01/02")})
 	stats = append(stats, map[string]interface{}{"EndDate": endDate.Format("2006/01/02")})
@@ -526,7 +599,28 @@ func (p *WebProcessorImpl) PrepareStatistics(bnpbData, nasaData *[][]string, sta
 	stats = append(stats, map[string]interface{}{"FloodPercentage": fmt.Sprintf("%0.3f%s", float64((float64(len(*bnpbData))-1)/(float64(len(*nasaData))-1)*100), "%")})
 
 	*statisticData = stats
-	return nil
+}
+
+func (p *WebProcessorImpl) PrepareDifferencedStatistics(stationaryData [][]float64, startDate, endDate time.Time, city string, statisticData *[]map[string]interface{}) {
+	transposedStationaryData := transpose(stationaryData)
+	floodCount := 0
+	stats := []map[string]interface{}{}
+	stats = append(stats, map[string]interface{}{"StartDate": startDate.Format("2006/01/02")})
+	stats = append(stats, map[string]interface{}{"EndDate": endDate.Format("2006/01/02")})
+	stats = append(stats, map[string]interface{}{"City": strings.ToUpper(city)})
+	stats = append(stats, map[string]interface{}{"DayCount": int(endDate.Sub(startDate).Hours()/24) + 1})
+	stats = append(stats, map[string]interface{}{"DataCount": len(transposedStationaryData)})
+
+	for _, d := range transposedStationaryData {
+		if d[6] == float64(1) {
+			floodCount++
+		}
+	}
+
+	stats = append(stats, map[string]interface{}{"FloodCount": floodCount})
+	stats = append(stats, map[string]interface{}{"FloodPercentage": fmt.Sprintf("%0.3f%s", float64(floodCount)/float64(len(transposedStationaryData))*100, "%")})
+
+	*statisticData = stats
 }
 
 func (p *WebProcessorImpl) getMax(data []float64) (max float64) {
@@ -561,7 +655,7 @@ func (p *WebProcessorImpl) adfCriticalValue(dataLength float64, significance int
 	return
 }
 
-func (p *WebProcessorImpl) adfTest(originalData []float64) (bool, error) {
+func (p *WebProcessorImpl) adfTest(originalData []float64) (bool, float64, float64, error) {
 	criticalValue := p.adfCriticalValue(float64(len(originalData)), 5)
 	var responseVectorAsSlice, designMatrixAsSlice []float64
 	for i := 0; i < len(originalData)-2; i++ {
@@ -583,13 +677,13 @@ func (p *WebProcessorImpl) adfTest(originalData []float64) (bool, error) {
 	var inverseXtxMatrix mat.Dense
 	err := inverseXtxMatrix.Inverse(xtxMatrix)
 	if err != nil {
-		return false, err
+		return false, 0.0, 0.0, err
 	}
 
 	olsResult := mat.NewDense(3, 1, nil)
 	olsResult.Mul(&inverseXtxMatrix, xtyMatrix)
 	olsData := olsResult.RawMatrix().Data
-	return criticalValue > olsData[1], nil
+	return criticalValue > olsData[1], criticalValue, olsData[1], nil
 }
 
 func (p *WebProcessorImpl) differencing(data []float64) (result []float64) {
@@ -647,8 +741,10 @@ func (p *WebProcessorImpl) vectorAutoregression(data [][]float64) ([]float64, er
 	return predictedValues, nil
 }
 
-func (p *WebProcessorImpl) knnClassification(dataPoints []float64, nasaData [][]float64, kValue int) (int, float64) {
+func (p *WebProcessorImpl) knnClassification(dataPoints []float64, nasaData [][]float64, kValue int) (int, [][]float64, []float64) {
 	var distances []float64
+	var nearest [][]float64
+	var nearestDistances []float64
 	for i := 0; i < len(nasaData[0]); i++ {
 		var distance float64
 		for j := 0; j < len(nasaData)-1; j++ {
@@ -667,16 +763,21 @@ func (p *WebProcessorImpl) knnClassification(dataPoints []float64, nasaData [][]
 		return distances[indices[i]] < distances[indices[j]]
 	})
 
+	transposedNasaData := transpose(appendIndex(nasaData))
 	sortedDistances := make([]float64, len(distances))
 	sortedFlood := make([]float64, len(nasaData[6]))
+	sortedNasaData := make([][]float64, len(distances))
 
 	for i, idx := range indices {
 		sortedDistances[i] = distances[idx]
 		sortedFlood[i] = nasaData[6][idx]
+		sortedNasaData[i] = transposedNasaData[idx]
 	}
 
 	var kScore float64
 	for i := 0; i < kValue; i++ {
+		nearestDistances = append(nearestDistances, sortedDistances[i])
+		nearest = append(nearest, sortedNasaData[i])
 		kScore += sortedFlood[i]
 	}
 
@@ -685,7 +786,7 @@ func (p *WebProcessorImpl) knnClassification(dataPoints []float64, nasaData [][]
 		result = 1
 	}
 
-	return result, kScore / float64(kValue)
+	return result, transpose(nearest), nearestDistances
 }
 
 func (p *WebProcessorImpl) evaluateVectorAutoregressionWithNRMSE(data [][]float64, start, stop float64) (result [][]float64, resultStr [][]string) {
@@ -733,6 +834,57 @@ func (p *WebProcessorImpl) evaluateVectorAutoregressionWithNRMSE(data [][]float6
 	return
 }
 
+func (p *WebProcessorImpl) getMinoritySample(data [][]float64) (minoritySample [][]float64) {
+	data = transpose(data)
+	for i := range data {
+		if data[i][len(data[i])-1] == 1 {
+			minoritySample = append(minoritySample, data[i])
+		}
+	}
+	minoritySample = transpose(minoritySample)
+	return
+}
+
+func (p *WebProcessorImpl) smoteReplaceMethod(minoritySample, data [][]float64, smoteK int) (toBeReplacedMap map[float64][]float64, smotedData [][]float64) {
+	// Select randomly from minority sample
+	transposedMinoritySample := transpose(minoritySample)
+	transposedData := transpose(data)
+	toBeReplacedMap = make(map[float64][]float64)
+
+	for i := 0; i < len(transposedMinoritySample); i++ {
+		randomSample := transposedMinoritySample[rand.Intn(len(transposedMinoritySample))]
+
+		_, nearestPoints, _ := p.knnClassification(randomSample[:len(randomSample)-1], data, smoteK+1)
+
+		// Remove First because itself is chosen
+		transposedNearestPoints := transpose(nearestPoints)[1:]
+		for _, nearestDataPoint := range transposedNearestPoints {
+			lambda := rand.Float64()
+			syntheticDataPoint := make([]float64, 6)
+			for k := 0; k < 6; k++ {
+				syntheticDataPoint[k] = randomSample[k] + lambda*(nearestDataPoint[k]-randomSample[k])
+			}
+
+			if _, exists := toBeReplacedMap[nearestDataPoint[7]]; !exists {
+				toBeReplacedMap[nearestDataPoint[7]] = syntheticDataPoint
+			}
+		}
+	}
+
+	transposedSmotedData := transposedData
+	for index, replace := range toBeReplacedMap {
+		if transposedSmotedData[int(index)][6] == 1 {
+			continue
+		}
+		syntheticData := replace
+		syntheticData = append(syntheticData, 1)
+		transposedSmotedData[int(index)] = syntheticData
+	}
+	smotedData = transpose(transposedSmotedData)
+
+	return
+}
+
 func matPrint(X mat.Matrix) {
 	fa := mat.Formatted(X, mat.Prefix(""), mat.Squeeze())
 	fmt.Printf("%v\n", fa)
@@ -754,4 +906,60 @@ func twoDimFloatToTwoDimString(input [][]float64) (output [][]string) {
 		output = append(output, tempStrSlice)
 	}
 	return
+}
+
+func transpose(data [][]float64) [][]float64 {
+	numFeatures := len(data)
+	numSamples := len(data[0])
+	transposed := make([][]float64, numSamples)
+	for i := range transposed {
+		transposed[i] = make([]float64, numFeatures)
+		for j := range data {
+			transposed[i][j] = data[j][i]
+		}
+	}
+	return transposed
+}
+
+// Only use to the untransposed Data
+func appendIndex(input [][]float64) (output [][]float64) {
+	index := make([]float64, len(input[0]))
+	for i := range input[0] {
+		index[i] = float64(i)
+	}
+	output = input
+	output = append(output, index)
+	return
+}
+
+func pairAdfWithParam(criticalValues, adfScore []float64) (output []adfWithParam) {
+	paramNames := []string{"WS10M", "RH2M", "PRECTOTCORR", "T2M", "T2M_MAX", "T2M_MIN"}
+	for i, name := range paramNames {
+		output = append(output, adfWithParam{
+			Name:          name,
+			CriticalValue: strconv.FormatFloat(criticalValues[i], 'f', 4, 64),
+			ADFScore:      strconv.FormatFloat(adfScore[i], 'f', 4, 64),
+		})
+	}
+
+	return
+}
+
+type adfWithParam struct {
+	Name          string
+	CriticalValue string
+	ADFScore      string
+}
+
+func findDifference(data1, data2 [][]float64) {
+	data1 = transpose(data1)
+	data2 = transpose(data2)
+	for i := 0; i < len(data1); i++ {
+		for j := 0; j < len(data1[i]); j++ {
+			if data1[i][j] != data2[i][j] {
+				fmt.Printf("DATA DIFFERENCE INDEX: %d\nData 1: %v\nData 2: %v\n\n", i, data1[i], data2[i])
+				break
+			}
+		}
+	}
 }

@@ -1,8 +1,8 @@
-{{ define "main" }}
+{{ define "main_bu" }}
 <main class="w-full h-full my-2 flex-1 flex justify-center overflow-auto">
     <div class="max-w-[600px] md:max-w-[750px] lg:max-w-[1000px] xl:max-w-[1250px] w-full h-full px-4 md:px-0">
-        <div x-data="{ message: true, tableView: false, tableInitialized: false, stats: 'default'}" class="relative w-full h-full">
-            <div id="top" class="w-full h-full flex flex-col gap-2">
+        <div x-data="{ message: true, tableView: false, tableInitialized: false }" class="relative w-full h-full">
+            <div id="test" class="w-full h-full flex flex-col gap-2">
                 <form class="w-full pt-2 flex justify-between">
                     <div class="flex gap-2 items-center">
                         <label for="start_date">Start Date</label>
@@ -30,10 +30,6 @@
                     <div class="flex gap-2 items-center">
                         <label for="k_value">K Value</label>
                         <input class="p-1 bg-stone-300" type="number" id="k_value" name="k_value" min="1" max="500" step="1">
-                    </div>
-                    <div class="flex gap-2 items-center">
-                        <label for="smote_k">SMOTE K Value</label>
-                        <input class="p-1 bg-stone-300" type="number" id="smote_k" name="smote_k" min="1" max="10" step="1">
                     </div>
                     <button hx-post="/flood" hx-target="main" hx-swap="outerHTML" type="submit" class="p-2 rounded-lg border-2 hover:brightness-75 active:brightness-50">Submit</button>
                 </form>
@@ -201,66 +197,10 @@
                             </table>
                         </div>
                     </div>
-                    <div x-show="showing === 'stationary'" class="w-full h-full flex flex-col gap-6 overflow-auto">
+                    <div x-show="showing === 'nasaFloodSmote'" class="w-full h-full flex flex-col gap-6 overflow-auto">
                         <div class="flex flex-col gap-4">
-                            <h1 class="text-2xl font-bold">Stationary Weather Parameter Data Paired with Flood</h1>
-
-                            <div class="flex flex-col gap-2">
-                                <h2 class="text-xl font-semibold">Max Differencing Step</h2>
-                                <p>Differencing applied to each parameter is based on the highest differencing steps required between the parameters: <strong>{{ .Data.DifferencingStep }}</strong>.</p>
-                            </div>
+                            <h1 class="text-2xl font-bold">Nasa and Flood Data with SMOTE Oversampling</h1>
                             
-                            <div class="flex flex-col gap-2">
-                                <h2 class="text-xl font-semibold">Parameters</h2>
-                                <ul class="list-disc list-inside">
-                                    <li><strong>RH2M:</strong> Relative Humidity at 2 Meters (%)</li>
-                                    <li><strong>T2M:</strong> Temperature at 2 Meters (°C)</li>
-                                    <li><strong>WS10M:</strong> Wind Speed at 10 Meters (m/s)</li>
-                                    <li><strong>PRECTOTCORR:</strong> Corrected Precipitation (mm/day)</li>
-                                    <li><strong>T2M_MAX:</strong> Maximum Temperature at 2 Meters (°C)</li>
-                                    <li><strong>T2M_MIN:</strong> Minimum Temperature at 2 Meters (°C)</li>
-                                    <li><strong>FLOOD:</strong> Flood Occurence at Date</li>
-                                </ul>
-                            </div>
-
-                            <div class="flex flex-col gap-2">
-                                <h2 class="text-xl font-semibold">ADF Critical Values</h2>
-                                <ul class="list-disc list-inside">
-                                    {{ range .Data.ADFWithParam }}
-                                    <li><strong>{{ .Name }}:</strong> {{ .CriticalValue }} > {{ .ADFScore }}</li>
-                                    {{ end }}
-                                </ul>
-                            </div>
-                        </div>
-                        <div class="w-full h-full overflow-x-auto">
-                            <table class="min-w-full table-auto border-collapse">
-                                <thead class="bg-gray-200">
-                                <tr>
-                                    {{ range .Data.StationaryDataHeaders }}
-                                    <th class="px-4 py-2 sticky top-0 bg-stone-300">{{ . }}</th>
-                                    {{ end }}
-                                </tr>
-                                </thead>
-                                <tbody>
-                                    {{ range .Data.StationaryDataValues }}
-                                    <tr>
-                                        {{ range . }}
-                                        <td class="border px-4 py-2">{{ . }}</td>
-                                        {{ end}}
-                                    </tr>
-                                    {{ end }}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                    <div x-show="showing === 'smote'" class="w-full h-full flex flex-col gap-6 overflow-auto">
-                        <div class="flex flex-col gap-4">
-                            <h1 class="text-2xl font-bold">Stationary Weather Parameter Data Paired with Flood with SMOTE</h1>
-                            
-                            <div class="flex flex-col gap-2">
-                                <h2 class="text-xl font-semibold">SMOTE Implementation</h2>
-                                <p>Minority Class is sampled, nearest neighbors to minority class are <strong>replaced</strong> with <strong>interpolated</strong> value between the original and the minority class.</p>
-                            </div>
                             <div class="flex flex-col gap-2">
                                 <h2 class="text-xl font-semibold">Parameters</h2>
                                 <ul class="list-disc list-inside">
@@ -278,13 +218,13 @@
                             <table class="min-w-full table-auto border-collapse">
                                 <thead class="bg-gray-200">
                                 <tr>
-                                    {{ range .Data.SmoteDataHeaders }}
+                                    {{ range .Data.NasaFloodSmoteHeaders }}
                                     <th class="px-4 py-2 sticky top-0 bg-stone-300">{{ . }}</th>
                                     {{ end }}
                                 </tr>
                                 </thead>
                                 <tbody>
-                                    {{ range .Data.SmoteDataValues }}
+                                    {{ range .Data.NasaFloodSmoteValues }}
                                     <tr>
                                         {{ range . }}
                                         <td class="border px-4 py-2">{{ . }}</td>
@@ -340,6 +280,11 @@
                             <h1 class="text-2xl font-bold">KNN Result based on Differenced Data</h1>
 
                             <div class="flex flex-col gap-2">
+                                <h2 class="text-xl font-semibold">Max Differencing Step</h2>
+                                <p>Differencing applied to each parameter is based on the highest differencing steps required between the parameters: <strong>{{ .Data.DifferencingStep }}</strong>.</p>
+                            </div>
+
+                            <div class="flex flex-col gap-2">
                                 <h2 class="text-xl font-semibold">KNN Classifcation Result</h2>
                                 <p>According to the nearest neighbors of the predicted data point, It is deemed to be: <strong>{{ .Data.KNNResult }}</strong>.</p>
                             </div>
@@ -367,51 +312,7 @@
                                     <tr>
                                         {{ range . }}
                                         <td class="border px-4 py-2">{{ . }}</td>
-                                        {{ end }}
-                                    </tr>
-                                    {{ end }}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                    <div x-show="showing === 'resultSmoteReplace'" class="w-full h-full flex flex-col gap-6 overflow-auto">
-                        <div class="flex flex-col gap-4">
-                            <h1 class="text-2xl font-bold">KNN Result based on Differenced Data</h1>
-
-                            <div class="flex flex-col gap-2">
-                                <h2 class="text-xl font-semibold">Max Differencing Step</h2>
-                                <p>Differencing applied to each parameter is based on the highest differencing steps required between the parameters: <strong>{{ .Data.DifferencingStep }}</strong>.</p>
-                            </div>
-
-                            <div class="flex flex-col gap-2">
-                                <h2 class="text-xl font-semibold">KNN Classifcation Result</h2>
-                                <p>According to the nearest neighbors of the predicted data point, It is deemed to be: <strong>{{ .Data.KNNResultSmoteReplace }}</strong>.</p>
-                            </div>
-
-                            <div class="flex flex-col gap-2">
-                                <h2 class="text-xl font-semibold">Predicted Values</h2>
-                                <ul class="list-disc list-inside">
-                                    {{ range $index, $header := .Data.PredictedHeaders }}
-                                    <li><strong>{{ $header }}:</strong> {{ index $.Data.PredictedValues $index }}</li>
-                                    {{ end }}
-                                </ul>
-                            </div>
-                        </div>
-                        <div x-show="!tableView" class="w-full h-full overflow-x-auto">
-                            <table class="min-w-full table-auto border-collapse">
-                                <thead class="bg-gray-200">
-                                <tr>
-                                    {{ range .Data.KNNDataHeadersSmoteReplace }}
-                                    <th class="px-4 py-2 sticky top-0 bg-stone-300">{{ . }}</th>
-                                    {{ end }}
-                                </tr>
-                                </thead>
-                                <tbody>
-                                    {{ range .Data.KNNDataValuesSmoteReplace }}
-                                    <tr>
-                                        {{ range . }}
-                                        <td class="border px-4 py-2">{{ . }}</td>
-                                        {{ end }}
+                                        {{ end}}
                                     </tr>
                                     {{ end }}
                                 </tbody>
@@ -420,38 +321,19 @@
                     </div>
                     <div class="w-1/4 h-full flex flex-col justify-between">
                         <div class="w-full flex flex-col gap-2">
-                            <button @click="showing = 'nasa'; stats = 'default'" class="p-2 rounded-lg border-2 hover:brightness-75 active:brightness-50">NASA DATA</button>
-                            <button @click="showing = 'bnpb'; stats = 'default'" class="p-2 rounded-lg border-2 hover:brightness-75 active:brightness-50">BNPB DATA</button>
-                            <button @click="showing = 'bnpbOri'; stats = 'default'" class="p-2 rounded-lg border-2 hover:brightness-75 active:brightness-50">ORIGINAL BNPB DATA</button>
-                            <button @click="showing = 'nasaFlood'; stats = 'default'" class="p-2 rounded-lg border-2 hover:brightness-75 active:brightness-50">NASA DATA WITH FLOOD</button>
-                            <button @click="showing = 'stationary'; stats = 'stationary'" class="p-2 rounded-lg border-2 hover:brightness-75 active:brightness-50">STATIONARY DATA</button>
-                            <button @click="showing = 'smote'; stats = 'stationarySmote'" class="p-2 rounded-lg border-2 hover:brightness-75 active:brightness-50">STATIONARY DATA WITH SMOTE</button>
-                            <button @click="showing = 'evaluationResult'; stats = 'default'" class="p-2 rounded-lg border-2 hover:brightness-75 active:brightness-50">NRMSE EVALUATION</button>
-                            <button @click="showing = 'result'; stats = 'default'" class="p-2 rounded-lg border-2 hover:brightness-75 active:brightness-50">KNN RESULT</button>
-                            <button @click="showing = 'resultSmoteReplace'; stats = 'stationarySmote'" class="p-2 rounded-lg border-2 hover:brightness-75 active:brightness-50">KNN RESULT WITH SMOTE</button>
-                            <button x-show="tableView == false" @click="tableView = true; if (!tableInitialized) { injectData(); tableInitialized = true; }" class="p-2 rounded-lg border-2 bg-emerald-200 hover:brightness-75 active:brightness-50">ENABLE TABLE VIEW</button>
-                            <button x-show="tableView == true" @click="tableView = false" class="p-2 rounded-lg border-2 bg-rose-200 hover:brightness-75 active:brightness-50">DISABLE TABLE VIEW</button>
+                            <button @click="showing = 'nasa'" class="p-2 rounded-lg border-2 hover:brightness-75 active:brightness-50">NASA DATA</button>
+                            <button @click="showing = 'bnpb'" class="p-2 rounded-lg border-2 hover:brightness-75 active:brightness-50">BNPB DATA</button>
+                            <button @click="showing = 'bnpbOri'" class="p-2 rounded-lg border-2 hover:brightness-75 active:brightness-50">ORIGINAL BNPB DATA</button>
+                            <button @click="showing = 'nasaFlood'" class="p-2 rounded-lg border-2 hover:brightness-75 active:brightness-50">NASA DATA WITH FLOOD</button>
+                            <button @click="showing = 'nasaFloodSmote'" class="p-2 rounded-lg border-2 hover:brightness-75 active:brightness-50">NASA DATA WITH FLOOD (SMOTE)</button>
+                            <button @click="showing = 'evaluationResult'" class="p-2 rounded-lg border-2 hover:brightness-75 active:brightness-50">NRMSE EVALUATION</button>
+                            <button @click="showing = 'result'" class="p-2 rounded-lg border-2 hover:brightness-75 active:brightness-50">KNN RESULT</button>
+                            <button @click="showing = 'smoteResult'" class="p-2 rounded-lg border-2 hover:brightness-75 active:brightness-50">KNN RESULT WITH SMOTE</button>
+                            <button x-show="tableView == false" @click="tableView = true; console.log('Rawr'); if (!tableInitialized) { injectData(); tableInitialized = true; }" class="p-2 rounded-lg border-2 bg-emerald-200 hover:brightness-75 active:brightness-50">ENABLE TABLE VIEW</button>
+                            <button x-show="tableView == true" @click="tableView = false; console.log('Ruwr');" class="p-2 rounded-lg border-2 bg-rose-200 hover:brightness-75 active:brightness-50">DISABLE TABLE VIEW</button>
                         </div>
-                        <div x-show="stats == 'default'" class="w-full p-2 border-2 rounded-md">
+                        <div class="w-full p-2 border-2 rounded-md">
                             {{ range .Data.StatisticData }}
-                            <div>
-                                {{ range $key, $value := . }}
-                                {{ $key }}: {{ $value}}
-                                {{ end }}
-                            </div>
-                            {{ end }}
-                        </div>
-                        <div x-show="stats == 'stationary'" class="w-full p-2 border-2 rounded-md">
-                            {{ range .Data.StationaryStatisticData }}
-                            <div>
-                                {{ range $key, $value := . }}
-                                {{ $key }}: {{ $value}}
-                                {{ end }}
-                            </div>
-                            {{ end }}
-                        </div>
-                        <div x-show="stats == 'stationarySmote'" class="w-full p-2 border-2 rounded-md">
-                            {{ range .Data.SmoteStatisticData }}
                             <div>
                                 {{ range $key, $value := . }}
                                 {{ $key }}: {{ $value}}

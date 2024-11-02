@@ -6,6 +6,8 @@ require (
 	github.com/jackc/pgx/v5 v5.7.1
 	github.com/joho/godotenv v1.5.1
 	github.com/labstack/echo/v4 v4.12.0
+	golang.org/x/exp v0.0.0-20231110203233-9a3e6036ecaa
+	gonum.org/v1/gonum v0.15.1
 )
 
 require (
@@ -24,5 +26,4 @@ require (
 	golang.org/x/sys v0.25.0 // indirect
 	golang.org/x/text v0.18.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
-	gonum.org/v1/gonum v0.15.1 // indirect
 )
