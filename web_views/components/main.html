@@ -429,6 +429,8 @@
                             <button @click="showing = 'evaluationResult'; stats = 'default'" class="p-2 rounded-lg border-2 hover:brightness-75 active:brightness-50">NRMSE EVALUATION</button>
                             <button @click="showing = 'result'; stats = 'default'" class="p-2 rounded-lg border-2 hover:brightness-75 active:brightness-50">KNN RESULT</button>
                             <button @click="showing = 'resultSmoteReplace'; stats = 'stationarySmote'" class="p-2 rounded-lg border-2 hover:brightness-75 active:brightness-50">KNN RESULT WITH SMOTE</button>
+                            <button @click="showing = 'resultSmoteReplace'; stats = 'stationarySmote'" class="p-2 rounded-lg border-2 hover:brightness-75 active:brightness-50">KNN RESULT WITH SMOTE</button>
+                            <button @click="showing = 'resultSmoteReplace'; stats = 'stationarySmote'" class="p-2 rounded-lg border-2 hover:brightness-75 active:brightness-50">KNN RESULT WITH SMOTE</button>
                             <button x-show="tableView == false" @click="tableView = true; if (!tableInitialized) { injectData(); tableInitialized = true; }" class="p-2 rounded-lg border-2 bg-emerald-200 hover:brightness-75 active:brightness-50">ENABLE TABLE VIEW</button>
                             <button x-show="tableView == true" @click="tableView = false" class="p-2 rounded-lg border-2 bg-rose-200 hover:brightness-75 active:brightness-50">DISABLE TABLE VIEW</button>
                         </div>

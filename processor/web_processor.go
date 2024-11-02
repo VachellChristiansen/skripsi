@@ -625,9 +625,12 @@ func (p *WebProcessorImpl) PrepareDifferencedStatistics(stationaryData [][]float
 
 func (p *WebProcessorImpl) getMax(data []float64) (max float64) {
 	max = data[0]
-	for _, i := range data {
-		if max < i {
-			max = i
+	for _, d := range data {
+		if d == -999 {
+			continue
+		}
+		if max < d {
+			max = d
 		}
 	}
 	return
@@ -635,9 +638,12 @@ func (p *WebProcessorImpl) getMax(data []float64) (max float64) {
 
 func (p *WebProcessorImpl) getMin(data []float64) (min float64) {
 	min = data[0]
-	for _, i := range data {
-		if min > i {
-			min = i
+	for _, d := range data {
+		if d == -999 {
+			continue
+		}
+		if min > d {
+			min = d
 		}
 	}
 	return
