@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html/template"
 	"io"
 	"math"
 	"net/http"
@@ -150,10 +151,23 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 		})
 	}
 
-	statisticData := []map[string]interface{}{}
-	p.PrepareStatistics(&bnpbData, &nasaDataStr, startDate, endDate, city, &statisticData)
+	newsData := [][]string{}
+	newsDataOri := [][]interface{}{}
+	newsFloodData := []float64{}
+	err = p.PreprocessFloodNewsCSV(&newsData, &newsDataOri, &newsFloodData, startDate, endDate, city)
+	if err != nil {
+		return c.Render(http.StatusOK, "main", IndexData{
+			Err:        fmt.Sprintf("Preprocessing Flood News data fails, %s", err.Error()),
+			StatusCode: http.StatusInternalServerError,
+		})
+	}
 
-	nasaWithFloodDataStr := p.MergeNASAWithFlood(nasaDataStr, floodData)
+	mergedFloodData, mergedFlood := p.MergeFloodData(newsData, bnpbData, newsFloodData, floodData)
+
+	statisticData := []map[string]interface{}{}
+	p.PrepareStatistics(&mergedFloodData, &nasaDataStr, startDate, endDate, city, &statisticData)
+
+	nasaWithFloodDataStr := p.MergeNASAWithFlood(nasaDataStr, mergedFlood)
 
 	var stationaryNasaData [][]float64
 	stationaryDataMinLength := 99999
@@ -217,7 +231,7 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 		}
 		stationaryNasaWithFloodData = append(stationaryNasaWithFloodData, differencedData)
 	}
-	stationaryNasaWithFloodData = append(stationaryNasaWithFloodData, floodData[len(floodData)-stationaryDataMinLength:])
+	stationaryNasaWithFloodData = append(stationaryNasaWithFloodData, mergedFlood[len(mergedFlood)-stationaryDataMinLength:])
 
 	var stationaryStatisticData []map[string]interface{}
 	p.PrepareDifferencedStatistics(stationaryNasaWithFloodData, startDate, endDate, city, &stationaryStatisticData)
@@ -264,7 +278,7 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 	knnDataSmoteReplaceStr := twoDimFloatToTwoDimString(transpose(knnDataSmoteReplace))
 	smoteDataStr := twoDimFloatToTwoDimString(transpose(smoteReplacedData))
 
-	findDifference(stationaryNasaWithFloodData, smoteReplacedData)
+	// findDifference(stationaryNasaWithFloodData, smoteReplacedData)
 
 	p.logger.LogAndContinue("Done Processing Request")
 	viewData := map[string]interface{}{
@@ -277,6 +291,8 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 		"BnpbValues":                 bnpbData[1:],
 		"BnpbHeadersOri":             bnpbDataOri[0],
 		"BnpbValuesOri":              bnpbDataOri[1:],
+		"NewsHeadersOri":             newsDataOri[0],
+		"NewsValuesOri":              newsDataOri[1:],
 		"NRMSEEvaluationHeaders":     nrmseResult[0],
 		"NRMSEEvaluationValues":      nrmseResult[1:],
 		"ADFWithParam":               pairAdfWithParam(criticalValues, adfScores),
@@ -554,9 +570,7 @@ func (p *WebProcessorImpl) PreprocessBNPBCSV(bnpbData, bnpbDataOri *[][]string, 
 	for cityName, data := range dataOri {
 		cityLoweredCase := strings.ToLower(cityName)
 		if strings.Contains(cityLoweredCase, city) {
-			for _, items := range data {
-				mergedDataOri = append(mergedDataOri, items)
-			}
+			mergedDataOri = append(mergedDataOri, data...)
 		}
 	}
 
@@ -576,6 +590,105 @@ func (p *WebProcessorImpl) PreprocessBNPBCSV(bnpbData, bnpbDataOri *[][]string, 
 	*bnpbDataOri = append([][]string{headersOri}, mergedDataOri...)
 
 	return nil
+}
+
+func (p *WebProcessorImpl) PreprocessFloodNewsCSV(newsData *[][]string, newsDataOri *[][]interface{}, floodData *[]float64, startDate, endDate time.Time, city string) error {
+	wd, err := os.Getwd()
+	if err != nil {
+		return errors.New("Get working directory fails Preprocess Flood News Data")
+	}
+
+	csvFile, err := os.Open(filepath.Join(wd, "tmp/data_berita_banjir.csv"))
+	if err != nil {
+		return errors.New("Opening data csv file fails")
+	}
+	defer csvFile.Close()
+
+	reader := csv.NewReader(csvFile)
+	records, err := reader.ReadAll()
+	if err != nil {
+		return errors.New("Reading data csv file fails")
+	}
+
+	headersStrInterface := []interface{}{"CITY", "FLOOD DATE", "LINK"}
+	headersStr := []string{"CITY", "FLOOD DATE"}
+	records = records[1:]
+	cityUppercase := strings.ToUpper(city)
+
+	preparedNewsData := [][]string{}
+	preparedNewsDataOri := [][]interface{}{}
+	recordDateMap := make(map[string]bool)
+	for _, record := range records {
+		dateSlice := strings.Split(record[1], "/")
+		year, _ := strconv.Atoi(dateSlice[0])
+		month, _ := strconv.Atoi(dateSlice[1])
+		day, _ := strconv.Atoi(dateSlice[2])
+		date := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.Local)
+
+		if date.After(startDate) && date.Before(endDate) && strings.ToLower(record[0]) == city {
+			if _, exists := recordDateMap[record[1]]; !exists {
+				var recordInterface []interface{}
+				preparedNewsData = append(preparedNewsData, []string{cityUppercase, record[1]})
+				recordInterface = append(recordInterface, record[0], record[1])
+				recordInterface = append(recordInterface, template.HTML(fmt.Sprintf("<a class=\"text-blue-800\" href=\"%s\">Link</a>", record[2])))
+				preparedNewsDataOri = append(preparedNewsDataOri, recordInterface)
+				recordDateMap[record[1]] = true
+			}
+		}
+	}
+
+	dayCount := int(endDate.Sub(startDate).Hours()/24) + 1
+	var flood []float64
+	for i := 0; i < dayCount; i++ {
+		curr := startDate.Add(time.Hour * 24 * time.Duration(i))
+		currStr := curr.Format("2006/01/02")
+		if _, exists := recordDateMap[currStr]; exists {
+			flood = append(flood, 1)
+		} else {
+			flood = append(flood, 0)
+		}
+	}
+
+	*floodData = flood
+	*newsData = append([][]string{headersStr}, preparedNewsData...)
+	*newsDataOri = append([][]interface{}{headersStrInterface}, preparedNewsDataOri...)
+
+	return nil
+}
+
+func (p *WebProcessorImpl) MergeFloodData(newsFloodData, bnpbFloodData [][]string, newsFlood, bnpbFlood []float64) (mergedFloodData [][]string, mergedFlood []float64) {
+	dateMap := make(map[string]bool)
+
+	headers := bnpbFloodData[0]
+	bnpbFloodData = bnpbFloodData[1:]
+	newsFloodData = newsFloodData[1:]
+	mergedData := [][]string{}
+
+	for _, bd := range bnpbFloodData {
+		if _, exists := dateMap[bd[1]]; !exists {
+			mergedData = append(mergedData, bd)
+			dateMap[bd[1]] = true
+		}
+	}
+
+	for _, nd := range newsFloodData {
+		if _, exists := dateMap[nd[1]]; !exists {
+			mergedData = append(mergedData, nd)
+			dateMap[nd[1]] = true
+		}
+	}
+
+	for i := 0; i < len(newsFlood); i++ {
+		if newsFlood[i] == 1 || bnpbFlood[i] == 1 {
+			mergedFlood = append(mergedFlood, 1)
+		} else {
+			mergedFlood = append(mergedFlood, 0)
+		}
+	}
+
+	mergedFloodData = append([][]string{headers}, mergedData...)
+
+	return
 }
 
 func (p *WebProcessorImpl) MergeNASAWithFlood(nasaDataStr [][]string, floodData []float64) (result [][]string) {
