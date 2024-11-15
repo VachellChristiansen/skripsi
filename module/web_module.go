@@ -46,7 +46,7 @@ func (m *WebModuleImpl) Init() {
 	static.Static("/", "web_views/static/")
 
 	m.e.GET("/", m.Processor.WebViewProcessor.ServeIndexPage)
-	m.e.POST("/flood", m.Processor.WebProcessor.HandleFloodPredictionRequest)
+	m.e.POST("/flood", m.Processor.WebProcessor.HandleFloodPredictionRequestV2)
 }
 
 func (m *WebModuleImpl) Serve() {

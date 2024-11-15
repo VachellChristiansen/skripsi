@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"os"
 	"skripsi/module"
 	"time"
 
@@ -12,15 +11,15 @@ import (
 func main() {
 	// Main Code Here
 	core := module.NewCoreModule()
-	core.Helper.LoggerHelper.LogAndContinue("Henlo %s", os.Getenv("POSTGRES_URL"))
+	// core.Helper.LoggerHelper.LogAndContinue("Henlo %s", os.Getenv("POSTGRES_URL"))
 	core.WebModule.Init()
 	core.WebModule.Serve()
 }
 
 func init() {
 	godotenv.Load()
-	core := module.NewCoreModule()
-	test(core)
+	// core := module.NewCoreModule()
+	// test(core)
 }
 
 func test(core module.CoreModule) {
