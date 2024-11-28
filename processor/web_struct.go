@@ -22,6 +22,7 @@ type Weather struct {
 	TempAverage      float64
 	TempMax          float64
 	TempMin          float64
+	Distance         float64
 	Flood            bool
 	DateStr          string
 	WindSpeedStr     string
@@ -30,13 +31,15 @@ type Weather struct {
 	TempAverageStr   string
 	TempMaxStr       string
 	TempMinStr       string
+	DistanceStr      string
 	FloodStr         template.HTML
 }
 
 type Weathers struct {
-	Items []Weather
-	Diff  DifferencedStatistics
-	Err   error
+	Items      []Weather
+	Diff       DifferencedStatistics
+	Oversample OversampledStatistics
+	Err        error
 }
 
 type DifferencedStatistics struct {
@@ -44,6 +47,11 @@ type DifferencedStatistics struct {
 	CriticalValues         Weather
 	Gamma                  Weather
 	CriticalValuesGammaMap []KeyValue
+}
+
+type OversampledStatistics struct {
+	SynthDataCount int
+	SynthData      []Weather
 }
 
 type Nasa struct {
@@ -96,11 +104,6 @@ type NewsData struct {
 	Items []News
 }
 
-type KeyValue struct {
-	Key   string
-	Value string
-}
-
 type Statistics struct {
 	City                   string
 	StartDate              string
@@ -115,6 +118,8 @@ type Statistics struct {
 	WeathersMap            []KeyValue
 	DifferencedWeathers    WeatherStatistic
 	DifferencedWeathersMap []KeyValue
+	Smote                  WeatherStatistic
+	SmoteMap               []KeyValue
 	Ref                    StatisticsReference
 }
 
@@ -124,6 +129,7 @@ type StatisticsReference struct {
 	News                *NewsData
 	Weathers            *Weathers
 	DifferencedWeathers *Weathers
+	Smote               *Weathers
 }
 
 type NasaStatistic struct {
@@ -143,4 +149,29 @@ type WeatherStatistic struct {
 	DataCount       string
 	FloodCount      string
 	FloodPercentage string
+}
+
+type ConfusionMatrix struct {
+	TruePositive     int
+	TrueNegative     int
+	FalsePositive    int
+	FalseNegative    int
+	Accuracy         float64
+	Precision        float64
+	Recall           float64
+	F1Score          float64
+	TrainTestStr     string
+	TruePositiveStr  string
+	TrueNegativeStr  string
+	FalsePositiveStr string
+	FalseNegativeStr string
+	AccuracyStr      string
+	PrecisionStr     string
+	RecallStr        string
+	F1ScoreStr       string
+}
+
+type KeyValue struct {
+	Key   string
+	Value string
 }

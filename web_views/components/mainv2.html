@@ -32,6 +32,10 @@
                         <input class="p-1 bg-stone-300" type="number" id="k_value" name="k_value" min="1" max="500" step="1">
                     </div>
                     <div class="flex gap-2 items-center">
+                        <label for="k_value">Lag Order</label>
+                        <input class="p-1 bg-stone-300" type="number" id="lag_order" name="lag_order" min="1" max="10" step="1">
+                    </div>
+                    <div class="flex gap-2 items-center">
                         <label for="smote_k">SMOTE K Value</label>
                         <input class="p-1 bg-stone-300" type="number" id="smote_k" name="smote_k" min="1" max="10" step="1">
                     </div>
@@ -42,11 +46,6 @@
                     <div x-show="showing === 'nasa'" class="w-full h-full flex flex-col gap-6">
                         <div class="flex flex-col gap-4">
                             <h1 class="text-2xl font-bold">NASA/POWER CERES/MERRA2 Daily Data Summary</h1>
-                            
-                            <div x-show="!tableView" class="flex flex-col gap-2">
-                                <h2 class="text-xl font-semibold">Date Range</h2>
-                                <p>Data available from <strong>{{ .Data.StartDate }}</strong> through <strong>{{ .Data.EndDate }}</strong>.</p>
-                            </div>
                             
                             <div x-show="!tableView" class="flex flex-col gap-2">
                                 <h2 class="text-xl font-semibold">Location Details</h2>
@@ -273,6 +272,243 @@
                             </table>
                         </div>
                     </div>
+                    <div x-show="showing === 'vectorAutoregression'" class="w-full h-full flex flex-col gap-6 overflow-auto">
+                        <div class="flex flex-col gap-4">
+                            <h1 class="text-2xl font-bold">Vector Autoregression Result</h1>
+                            
+                            <div class="flex flex-col gap-2">
+                                <h2 class="text-xl font-semibold">Vector Autoregression Predicted Values</h2>
+                                <ul class="list-disc list-inside">
+                                {{ range .Data.VectorAutoregressionResult }}
+                                    <li><strong>{{ .Key }}:</strong> {{ .Value }}</li>
+                                {{ end }}
+                                </ul>
+                            </div>
+
+                            <div class="flex flex-col gap-2">
+                                <h2 class="text-xl font-semibold">Parameters</h2>
+                                <ul class="list-disc list-inside">
+                                    <li><strong>WS10M:</strong> Wind Speed at 10 Meters (m/s)</li>
+                                    <li><strong>RH2M:</strong> Relative Humidity at 2 Meters (%)</li>
+                                    <li><strong>PRECTOTCORR:</strong> Corrected Precipitation (mm/day)</li>
+                                    <li><strong>T2M:</strong> Temperature at 2 Meters (°C)</li>
+                                    <li><strong>T2M_MAX:</strong> Maximum Temperature at 2 Meters (°C)</li>
+                                    <li><strong>T2M_MIN:</strong> Minimum Temperature at 2 Meters (°C)</li>
+                                    <li><strong>FLOOD:</strong> Occurence of Flood</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="w-full h-full overflow-x-auto">
+                            <table class="min-w-full table-auto border-collapse">
+                                <thead class="bg-gray-200">
+                                <tr>
+                                    {{ range .Data.VectorAutoregressionHeaders }}
+                                    <th class="px-4 py-2 sticky top-0 bg-stone-300">{{ . }}</th>
+                                    {{ end }}
+                                </tr>
+                                </thead>
+                                <tbody>
+                                    {{ range .Data.VectorAutoregressionValues }}
+                                    <tr>
+                                        <td class="border px-4 py-2">{{ .DateStr }}</td>
+                                        <td class="border px-4 py-2">{{ .WindSpeedStr }}</td>
+                                        <td class="border px-4 py-2">{{ .RelHumidityStr }}</td>
+                                        <td class="border px-4 py-2">{{ .PrecipitationStr }}</td>
+                                        <td class="border px-4 py-2">{{ .TempAverageStr }}</td>
+                                        <td class="border px-4 py-2">{{ .TempMaxStr }}</td>
+                                        <td class="border px-4 py-2">{{ .TempMinStr }}</td>
+                                    </tr>
+                                    {{ end }}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div x-show="showing === 'knn'" class="w-full h-full flex flex-col gap-6 overflow-auto">
+                        <div class="flex flex-col gap-4">
+                            <h1 class="text-2xl font-bold">KNN Result</h1>
+                            
+                            <div class="flex flex-col gap-2">
+                                <h2 class="text-xl font-semibold">K Nearest Neighbors Values</h2>
+                                <p>KNN Result on flood classification is: <strong>{{ .Data.KNNResult }}</strong>.</p>
+                            </div>
+
+                            <div class="flex flex-col gap-2">
+                                <h2 class="text-xl font-semibold">Parameters</h2>
+                                <ul class="list-disc list-inside">
+                                    <li><strong>WS10M:</strong> Wind Speed at 10 Meters (m/s)</li>
+                                    <li><strong>RH2M:</strong> Relative Humidity at 2 Meters (%)</li>
+                                    <li><strong>PRECTOTCORR:</strong> Corrected Precipitation (mm/day)</li>
+                                    <li><strong>T2M:</strong> Temperature at 2 Meters (°C)</li>
+                                    <li><strong>T2M_MAX:</strong> Maximum Temperature at 2 Meters (°C)</li>
+                                    <li><strong>T2M_MIN:</strong> Minimum Temperature at 2 Meters (°C)</li>
+                                    <li><strong>DISTANCE:</strong> Euclidean Distance Between Predicted Data Point and its Nearest Neigbor</li>
+                                    <li><strong>FLOOD:</strong> Occurence of Flood</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="w-full h-full overflow-x-auto">
+                            <table class="min-w-full table-auto border-collapse">
+                                <thead class="bg-gray-200">
+                                <tr>
+                                    {{ range .Data.KNNHeaders }}
+                                    <th class="px-4 py-2 sticky top-0 bg-stone-300">{{ . }}</th>
+                                    {{ end }}
+                                </tr>
+                                </thead>
+                                <tbody>
+                                    {{ range .Data.KNNValues }}
+                                    <tr>
+                                        <td class="border px-4 py-2">{{ .WindSpeedStr }}</td>
+                                        <td class="border px-4 py-2">{{ .RelHumidityStr }}</td>
+                                        <td class="border px-4 py-2">{{ .PrecipitationStr }}</td>
+                                        <td class="border px-4 py-2">{{ .TempAverageStr }}</td>
+                                        <td class="border px-4 py-2">{{ .TempMaxStr }}</td>
+                                        <td class="border px-4 py-2">{{ .TempMinStr }}</td>
+                                        <td class="border px-4 py-2">{{ .DistanceStr }}</td>
+                                        <td class="border px-4 py-2">{{ .FloodStr }}</td>
+                                    </tr>
+                                    {{ end }}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div x-show="showing === 'knnEval'" class="w-full h-full flex flex-col gap-6 overflow-auto">
+                        <div class="flex flex-col gap-4">
+                            <h1 class="text-2xl font-bold">KNN Evaluation</h1>
+                            
+                            <div class="flex flex-col gap-2">
+                                <h2 class="text-xl font-semibold">Fields</h2>
+                                <ul class="list-disc list-inside">
+                                    <li><strong>True Positive (TP):</strong> Cases where the model correctly predicted the positive class</li>
+                                    <li><strong>False Positive (FP):</strong> Cases where the model incorrectly predicts the positive class, when the actual class is negative</li>
+                                    <li><strong>True Negative (TN):</strong> Cases where the model correctly predicts the negative class</li>
+                                    <li><strong>False Negative (FN):</strong> Cases where the model incorrectly predicts the negative class when the actual class is positive</li>
+                                    <li><strong>Accuracy:</strong> Best when classes are balanced, but it can be misleading for imbalanced Datasets.</li>
+                                    <li><strong>Precision:</strong> Important when cost for false positives is high.</li>
+                                    <li><strong>Recall:</strong> Important when cost for false negatives is high.</li>
+                                    <li><strong>F1-Score:</strong> Balanced measure between precision and recall</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="w-full h-full overflow-x-auto">
+                            <table class="min-w-full table-auto border-collapse">
+                                <thead class="bg-gray-200">
+                                <tr>
+                                    {{ range .Data.KNNEvalHeaders }}
+                                    <th class="px-4 py-2 sticky top-0 bg-stone-300">{{ . }}</th>
+                                    {{ end }}
+                                </tr>
+                                </thead>
+                                <tbody>
+                                    {{ range .Data.KNNEvalValues }}
+                                    <tr>
+                                        <td class="border px-4 py-2">{{ .TrainTestStr }}</td>
+                                        <td class="border px-4 py-2">{{ .TruePositiveStr }}</td>
+                                        <td class="border px-4 py-2">{{ .FalsePositiveStr }}</td>
+                                        <td class="border px-4 py-2">{{ .TrueNegativeStr }}</td>
+                                        <td class="border px-4 py-2">{{ .FalseNegativeStr }}</td>
+                                        <td class="border px-4 py-2">{{ .AccuracyStr }}</td>
+                                        <td class="border px-4 py-2">{{ .PrecisionStr }}</td>
+                                        <td class="border px-4 py-2">{{ .RecallStr }}</td>
+                                        <td class="border px-4 py-2">{{ .F1ScoreStr }}</td>
+                                    </tr>
+                                    {{ end }}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div x-show="showing === 'smote'" class="w-full h-full flex flex-col gap-6 overflow-auto">
+                        <div class="flex flex-col gap-4">
+                            <h1 class="text-2xl font-bold">SMOTE Oversampled Data</h1>
+                            
+                            <div class="flex flex-col gap-2">
+                                <h2 class="text-xl font-semibold">Parameters</h2>
+                                <ul class="list-disc list-inside">
+                                    <li><strong>WS10M:</strong> Wind Speed at 10 Meters (m/s)</li>
+                                    <li><strong>RH2M:</strong> Relative Humidity at 2 Meters (%)</li>
+                                    <li><strong>PRECTOTCORR:</strong> Corrected Precipitation (mm/day)</li>
+                                    <li><strong>T2M:</strong> Temperature at 2 Meters (°C)</li>
+                                    <li><strong>T2M_MAX:</strong> Maximum Temperature at 2 Meters (°C)</li>
+                                    <li><strong>T2M_MIN:</strong> Minimum Temperature at 2 Meters (°C)</li>
+                                    <li><strong>FLOOD:</strong> Occurence of Flood</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="w-full h-full overflow-x-auto">
+                            <table class="min-w-full table-auto border-collapse">
+                                <thead class="bg-gray-200">
+                                <tr>
+                                    {{ range .Data.SMOTEHeaders }}
+                                    <th class="px-4 py-2 sticky top-0 bg-stone-300">{{ . }}</th>
+                                    {{ end }}
+                                </tr>
+                                </thead>
+                                <tbody>
+                                    {{ range .Data.SMOTEValues }}
+                                    <tr>
+                                        <td class="border px-4 py-2">{{ .DateStr }}</td>
+                                        <td class="border px-4 py-2">{{ .WindSpeedStr }}</td>
+                                        <td class="border px-4 py-2">{{ .RelHumidityStr }}</td>
+                                        <td class="border px-4 py-2">{{ .PrecipitationStr }}</td>
+                                        <td class="border px-4 py-2">{{ .TempAverageStr }}</td>
+                                        <td class="border px-4 py-2">{{ .TempMaxStr }}</td>
+                                        <td class="border px-4 py-2">{{ .TempMinStr }}</td>
+                                        <td class="border px-4 py-2">{{ .FloodStr }}</td>
+                                    </tr>
+                                    {{ end }}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div x-show="showing === 'smoteKnn'" class="w-full h-full flex flex-col gap-6 overflow-auto">
+                        <div class="flex flex-col gap-4">
+                            <h1 class="text-2xl font-bold">KNN Result With SMOTE</h1>
+                            
+                            <div class="flex flex-col gap-2">
+                                <h2 class="text-xl font-semibold">K Nearest Neighbors Values</h2>
+                                <p>KNN Result on flood classification is: <strong>{{ .Data.SMOTEKNNResult }}</strong>.</p>
+                            </div>
+
+                            <div class="flex flex-col gap-2">
+                                <h2 class="text-xl font-semibold">Parameters</h2>
+                                <ul class="list-disc list-inside">
+                                    <li><strong>WS10M:</strong> Wind Speed at 10 Meters (m/s)</li>
+                                    <li><strong>RH2M:</strong> Relative Humidity at 2 Meters (%)</li>
+                                    <li><strong>PRECTOTCORR:</strong> Corrected Precipitation (mm/day)</li>
+                                    <li><strong>T2M:</strong> Temperature at 2 Meters (°C)</li>
+                                    <li><strong>T2M_MAX:</strong> Maximum Temperature at 2 Meters (°C)</li>
+                                    <li><strong>T2M_MIN:</strong> Minimum Temperature at 2 Meters (°C)</li>
+                                    <li><strong>DISTANCE:</strong> Euclidean Distance Between Predicted Data Point and its Nearest Neigbor</li>
+                                    <li><strong>FLOOD:</strong> Occurence of Flood</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="w-full h-full overflow-x-auto">
+                            <table class="min-w-full table-auto border-collapse">
+                                <thead class="bg-gray-200">
+                                <tr>
+                                    {{ range .Data.SMOTEKNNHeaders }}
+                                    <th class="px-4 py-2 sticky top-0 bg-stone-300">{{ . }}</th>
+                                    {{ end }}
+                                </tr>
+                                </thead>
+                                <tbody>
+                                    {{ range .Data.SMOTEKNNValues }}
+                                    <tr>
+                                        <td class="border px-4 py-2">{{ .WindSpeedStr }}</td>
+                                        <td class="border px-4 py-2">{{ .RelHumidityStr }}</td>
+                                        <td class="border px-4 py-2">{{ .PrecipitationStr }}</td>
+                                        <td class="border px-4 py-2">{{ .TempAverageStr }}</td>
+                                        <td class="border px-4 py-2">{{ .TempMaxStr }}</td>
+                                        <td class="border px-4 py-2">{{ .TempMinStr }}</td>
+                                        <td class="border px-4 py-2">{{ .DistanceStr }}</td>
+                                        <td class="border px-4 py-2">{{ .FloodStr }}</td>
+                                    </tr>
+                                    {{ end }}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                     <div class="w-1/4 h-full flex flex-col gap-4 justify-between">
                         <div class="w-full h-3/4 overflow-y-auto flex flex-col gap-2">
                             <button @click="showing = 'nasa'; stats = 'default'" class="p-2 rounded-lg border-2 hover:brightness-75 active:brightness-50">NASA DATA</button>
@@ -280,6 +516,11 @@
                             <button @click="showing = 'news'; stats = 'default'" class="p-2 rounded-lg border-2 hover:brightness-75 active:brightness-50">NEWS FLOOD DATA</button>
                             <button @click="showing = 'weatherFlood'; stats = 'default'" class="p-2 rounded-lg border-2 hover:brightness-75 active:brightness-50">WEATHER FLOOD DATA</button>
                             <button @click="showing = 'differencedWeatherFlood'; stats = 'default'" class="p-2 rounded-lg border-2 hover:brightness-75 active:brightness-50">STATIONARY WEATHER FLOOD DATA</button>
+                            <button @click="showing = 'vectorAutoregression'; stats = 'default'" class="p-2 rounded-lg border-2 hover:brightness-75 active:brightness-50">VECTOR AUTOREGRESSION</button>
+                            <button @click="showing = 'knn'; stats = 'default'" class="p-2 rounded-lg border-2 hover:brightness-75 active:brightness-50">KNN</button>
+                            <button @click="showing = 'knnEval'; stats = 'default'" class="p-2 rounded-lg border-2 hover:brightness-75 active:brightness-50">KNN EVALUATION</button>
+                            <button @click="showing = 'smote'; stats = 'default'" class="p-2 rounded-lg border-2 hover:brightness-75 active:brightness-50">SMOTE DATA</button>
+                            <button @click="showing = 'smoteKnn'; stats = 'default'" class="p-2 rounded-lg border-2 hover:brightness-75 active:brightness-50">SMOTE KNN</button>
                         </div>
                         <button x-show="tableView == false" @click="tableView = true; if (!tableInitialized) { injectData(); tableInitialized = true; }" class="w-full p-2 rounded-lg border-2 bg-emerald-200 hover:brightness-75 active:brightness-50">ENABLE TABLE VIEW</button>
                         <button x-show="tableView == true" @click="tableView = false" class="w-full p-2 rounded-lg border-2 bg-rose-200 hover:brightness-75 active:brightness-50">DISABLE TABLE VIEW</button>
@@ -313,6 +554,13 @@
                         </div>
                         <div x-show="showing == 'differencedWeatherFlood'" class="w-full h-1/4 p-2 border-2 rounded-md">
                             {{ range .Data.Statistics.DifferencedWeathersMap }}
+                            <div>
+                                {{ .Key }}: {{ .Value }}
+                            </div>
+                            {{ end }}
+                        </div>
+                        <div x-show="showing == 'smote'" class="w-full h-1/4 p-2 border-2 rounded-md">
+                            {{ range .Data.Statistics.SmoteMap }}
                             <div>
                                 {{ .Key }}: {{ .Value }}
                             </div>

@@ -63,7 +63,7 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequestV2(c echo.Context) error 
 	// Begin Validation
 	startDate, err := time.Parse(DateHyphenYMD, c.FormValue("start_date"))
 	if err != nil {
-		return c.Render(http.StatusOK, "mainv2", IndexData{
+		return c.Render(http.StatusOK, "main", IndexData{
 			Err:        "Parsing Date Error",
 			StatusCode: http.StatusBadRequest,
 			Timestamp:  time.Now().Unix(),
@@ -71,7 +71,7 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequestV2(c echo.Context) error 
 	}
 	endDate, err := time.Parse(DateHyphenYMD, c.FormValue("end_date"))
 	if err != nil {
-		return c.Render(http.StatusOK, "mainv2", IndexData{
+		return c.Render(http.StatusOK, "main", IndexData{
 			Err:        "Parsing Date Error",
 			StatusCode: http.StatusBadRequest,
 			Timestamp:  time.Now().Unix(),
@@ -80,21 +80,21 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequestV2(c echo.Context) error 
 
 	city := c.FormValue("city")
 	if startDate.After(endDate) {
-		return c.Render(http.StatusOK, "mainv2", IndexData{
+		return c.Render(http.StatusOK, "main", IndexData{
 			Err:        "Start Date can't be later than End Date",
 			StatusCode: http.StatusUnprocessableEntity,
 		})
 	}
 
 	if int(endDate.Sub(startDate).Hours()/24) < 180 {
-		return c.Render(http.StatusOK, "mainv2", IndexData{
+		return c.Render(http.StatusOK, "main", IndexData{
 			Err:        "Day Count can't be lower than 180 days to ensure proper calculation",
 			StatusCode: http.StatusUnprocessableEntity,
 		})
 	}
 
 	if startDate.Before(startDateLimit) || endDate.After(endDateLimit) {
-		return c.Render(http.StatusOK, "mainv2", IndexData{
+		return c.Render(http.StatusOK, "main", IndexData{
 			Err:        "Date can only be within 2008/01/01 until 2024/09/30",
 			StatusCode: http.StatusUnprocessableEntity,
 		})
@@ -102,29 +102,44 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequestV2(c echo.Context) error 
 
 	kValue, err := strconv.Atoi(c.FormValue("k_value"))
 	if err != nil {
-		return c.Render(http.StatusOK, "mainv2", IndexData{
+		return c.Render(http.StatusOK, "main", IndexData{
 			Err:        "K Value is not a valid number",
 			StatusCode: http.StatusUnprocessableEntity,
 		})
 	}
 
 	if kValue <= 0 || kValue > 500 {
-		return c.Render(http.StatusOK, "mainv2", IndexData{
+		return c.Render(http.StatusOK, "main", IndexData{
 			Err:        "Chosen K Value is not Valid (Must be 1 - 500)",
+			StatusCode: http.StatusUnprocessableEntity,
+		})
+	}
+
+	lagOrder, err := strconv.Atoi(c.FormValue("lag_order"))
+	if err != nil {
+		return c.Render(http.StatusOK, "main", IndexData{
+			Err:        "Lag Order is not a valid number",
+			StatusCode: http.StatusUnprocessableEntity,
+		})
+	}
+
+	if lagOrder <= 0 || lagOrder > 10 {
+		return c.Render(http.StatusOK, "main", IndexData{
+			Err:        "Chosen Lag Order is not Valid (Must be 1 - 10)",
 			StatusCode: http.StatusUnprocessableEntity,
 		})
 	}
 
 	smoteK, err := strconv.Atoi(c.FormValue("smote_k"))
 	if err != nil {
-		return c.Render(http.StatusOK, "mainv2", IndexData{
+		return c.Render(http.StatusOK, "main", IndexData{
 			Err:        "SMOET K Value is not a valid number",
 			StatusCode: http.StatusUnprocessableEntity,
 		})
 	}
 
 	if smoteK <= 0 || smoteK > 10 {
-		return c.Render(http.StatusOK, "mainv2", IndexData{
+		return c.Render(http.StatusOK, "main", IndexData{
 			Err:        "Chosen SMOTE K Value is not Valid (Must be 1 - 10)",
 			StatusCode: http.StatusUnprocessableEntity,
 		})
@@ -135,7 +150,7 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequestV2(c echo.Context) error 
 
 	latlong, exists := cities[city]
 	if !exists {
-		return c.Render(http.StatusOK, "mainv2", IndexData{
+		return c.Render(http.StatusOK, "main", IndexData{
 			Err:        "City is not available",
 			StatusCode: http.StatusUnprocessableEntity,
 		})
@@ -152,7 +167,7 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequestV2(c echo.Context) error 
 	url := fmt.Sprintf("%s?start=%s&end=%s&latitude=%s&longitude=%s&%s", constant.NasaPowerAPIBaseURL, startDateRequest, endDateRequest, latitude, longitude, constant.NasaPowerAPIParams)
 	weathers.PrepareNasa(url)
 	if weathers.Err != nil {
-		return c.Render(http.StatusOK, "mainv2", IndexData{
+		return c.Render(http.StatusOK, "main", IndexData{
 			Err:        "Fetching Data from NASA Power API Fails",
 			StatusCode: http.StatusUnprocessableEntity,
 		})
@@ -160,7 +175,7 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequestV2(c echo.Context) error 
 
 	weathers.InjectNasa(&nasa)
 	if weathers.Err != nil {
-		return c.Render(http.StatusOK, "mainv2", IndexData{
+		return c.Render(http.StatusOK, "main", IndexData{
 			Err:        "Preparing Data from NASA Power API Fails",
 			StatusCode: http.StatusUnprocessableEntity,
 		})
@@ -169,7 +184,7 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequestV2(c echo.Context) error 
 
 	weathers.InjectBnpb(&bnpb, startDate, endDate, city)
 	if weathers.Err != nil {
-		return c.Render(http.StatusOK, "mainv2", IndexData{
+		return c.Render(http.StatusOK, "main", IndexData{
 			Err:        "Preparing Data from BNPB Fails",
 			StatusCode: http.StatusUnprocessableEntity,
 		})
@@ -177,7 +192,7 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequestV2(c echo.Context) error 
 
 	weathers.InjectNews(&news, startDate, endDate, city)
 	if weathers.Err != nil {
-		return c.Render(http.StatusOK, "mainv2", IndexData{
+		return c.Render(http.StatusOK, "main", IndexData{
 			Err:        "Preparing Data from News Fails",
 			StatusCode: http.StatusUnprocessableEntity,
 		})
@@ -185,7 +200,14 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequestV2(c echo.Context) error 
 
 	differencedWeathers := weathers.Differencing()
 
-	differencedWeathers.VectorAutoregression(1)
+	prediction := differencedWeathers.VectorAutoregression(lagOrder)
+	prediction.FillString()
+	vectorAutoregressionEvaluation := differencedWeathers.VectorAutoregressionEval(6, 5, lagOrder)
+	neighbors, knnResult := differencedWeathers.KNearestNeighbor(kValue, prediction)
+	knnEval := differencedWeathers.KNearestNeighborEval(6, 5, kValue, lagOrder)
+
+	oversampled := differencedWeathers.SmoteOversampling(smoteK)
+	smoteNeighbors, smoteKnnResult := oversampled.KNearestNeighbor(kValue, prediction)
 
 	statistics := Statistics{
 		Ref: StatisticsReference{
@@ -194,12 +216,24 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequestV2(c echo.Context) error 
 			News:                &news,
 			Weathers:            &weathers,
 			DifferencedWeathers: &differencedWeathers,
+			Smote:               &oversampled,
 		},
+	}
+	predictionMap := []KeyValue{
+		{Key: "WS10M", Value: prediction.WindSpeedStr},
+		{Key: "RH2M", Value: prediction.RelHumidityStr},
+		{Key: "PRECTOTCORR", Value: prediction.PrecipitationStr},
+		{Key: "T2M", Value: prediction.TempAverageStr},
+		{Key: "T2M_MAX", Value: prediction.TempMaxStr},
+		{Key: "T2M_MIN", Value: prediction.TempMinStr},
 	}
 
 	statistics.FillStatistics(startDate, endDate, city)
-	differencedWeathers.FillString()
 	weathers.FillString()
+	differencedWeathers.FillString()
+	neighbors.FillString()
+	oversampled.FillString()
+	smoteNeighbors.FillString()
 	p.logger.LogAndContinue("Done Processing Request")
 	viewData := map[string]interface{}{
 		"NasaHeaders":                       []string{"DATE", "WS10M", "RH2M", "PRECTOTCORR", "T2M", "T2M MAX", "T2M MIN"},
@@ -214,20 +248,26 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequestV2(c echo.Context) error 
 		"DifferencedWeatherAndFloodHeaders": []string{"DATE", "WS10M", "RH2M", "PRECTOTCORR", "T2M", "T2M MAX", "T2M MIN", "FLOOD"},
 		"DifferencedWeatherAndFloodValues":  differencedWeathers.Items,
 		"DifferencedWeatherAndFloodStats":   differencedWeathers.Diff,
+		"VectorAutoregressionHeaders":       []string{"TRAIN-TEST (%)", "WS10M", "RH2M", "PRECTOTCORR", "T2M", "T2M MAX", "T2M MIN"},
+		"VectorAutoregressionValues":        vectorAutoregressionEvaluation.Items,
+		"VectorAutoregressionResult":        predictionMap,
+		"KNNHeaders":                        []string{"WS10M", "RH2M", "PRECTOTCORR", "T2M", "T2M MAX", "T2M MIN", "DISTANCE", "FLOOD"},
+		"KNNValues":                         neighbors.Items,
+		"KNNResult":                         knnResult,
+		"KNNEvalHeaders":                    []string{"TRAIN-TEST (%)", "TP", "FP", "TN", "FN", "ACCURACY", "PRECISION", "RECALL", "F1-SCORE"},
+		"KNNEvalValues":                     knnEval,
+		"SMOTEHeaders":                      []string{"DATE", "WS10M", "RH2M", "PRECTOTCORR", "T2M", "T2M MAX", "T2M MIN", "FLOOD"},
+		"SMOTEValues":                       oversampled.Items,
+		"SMOTEKNNHeaders":                   []string{"WS10M", "RH2M", "PRECTOTCORR", "T2M", "T2M MAX", "T2M MIN", "DISTANCE", "FLOOD"},
+		"SMOTEKNNValues":                    smoteNeighbors.Items,
+		"SMOTEKNNResult":                    smoteKnnResult,
 		"Statistics":                        statistics,
 		"Latitude":                          latitude,
 		"Longitude":                         longitude,
 		"Timestamp":                         time.Now().Unix(),
 	}
-	// jsData, err := json.Marshal(viewData)
-	// if err != nil {
-	// 	return c.Render(http.StatusOK, "mainv2", IndexData{
-	// 		Err:        fmt.Sprintf("Marshaling data into json fails, %s", err.Error()),
-	// 		StatusCode: http.StatusInternalServerError,
-	// 	})
-	// }
 
-	return c.Render(http.StatusOK, "mainv2", IndexData{
+	return c.Render(http.StatusOK, "main", IndexData{
 		Data:       viewData,
 		Message:    fmt.Sprintf("Preparation Done. Time Taken: %dms", time.Since(start).Milliseconds()),
 		StatusCode: http.StatusOK,
@@ -1798,6 +1838,7 @@ func (w *Weathers) Differencing() (differencedWeathers Weathers) {
 }
 
 func (w *Weathers) VectorAutoregression(lagOrder int) (prediction Weather) {
+	numOfVariables := 6
 	matrixForm := make([][]float64, len(w.Items))
 	for i, d := range w.Items {
 		matrixForm[i] = []float64{d.WindSpeed, d.RelHumidity, d.Precipitation, d.TempAverage, d.TempMax, d.TempMin}
@@ -1839,11 +1880,296 @@ func (w *Weathers) VectorAutoregression(lagOrder int) (prediction Weather) {
 	for i := 0; i < len(result); i++ {
 		result[i] = B.RawRowView(i)
 	}
+	result = transpose(result)
 
-	for _, d := range result {
-		fmt.Println(d)
+	predictionSlice := make([]float64, 6)
+	for i, d := range result {
+		predictionSlice[i] = d[0]
+		for j := 1; j < len(d); j++ {
+			previousIndex := len(matrixForm) - ((j-1)/6 + 1)
+			predictionSlice[i] += d[j] * matrixForm[previousIndex][(j-1)-numOfVariables*((j-1)/numOfVariables)]
+		}
 	}
 
+	prediction.WindSpeed = predictionSlice[0]
+	prediction.RelHumidity = predictionSlice[1]
+	prediction.Precipitation = predictionSlice[2]
+	prediction.TempAverage = predictionSlice[3]
+	prediction.TempMax = predictionSlice[4]
+	prediction.TempMin = predictionSlice[5]
+
+	return
+}
+
+func (w *Weathers) VectorAutoregressionEval(step, magnitude, lagOrder int) (evaluatedNrmse Weathers) {
+	if magnitude*step > 100 {
+		return
+	}
+
+	max, min := w.GetMaxMin()
+	nrmseEval := make([]Weather, step)
+
+	for i := 1; i <= step; i++ {
+		testPerc := fmt.Sprintf("%d", i*magnitude)
+		trainPerc := fmt.Sprintf("%d", 100-i*magnitude)
+
+		test := magnitude * i
+		testSize := len(w.Items) * test / 100
+		trainSize := len(w.Items) - testSize
+
+		rmse := Weather{}
+		nrmse := Weather{}
+		predictionCount := 0
+
+		for j := trainSize; j < len(w.Items)-1; j++ {
+			trainSlice := w.Items[:j]
+			trainDataset := Weathers{
+				Items: trainSlice,
+			}
+
+			predicted := trainDataset.VectorAutoregression(lagOrder)
+			actual := w.Items[j]
+
+			rmse.WindSpeed += math.Pow(predicted.WindSpeed-actual.WindSpeed, 2)
+			rmse.RelHumidity += math.Pow(predicted.RelHumidity-actual.RelHumidity, 2)
+			rmse.Precipitation += math.Pow(predicted.Precipitation-actual.Precipitation, 2)
+			rmse.TempAverage += math.Pow(predicted.TempAverage-actual.TempAverage, 2)
+			rmse.TempMax += math.Pow(predicted.TempMax-actual.TempMax, 2)
+			rmse.TempMin += math.Pow(predicted.TempMin-actual.TempMin, 2)
+
+			predictionCount++
+		}
+
+		predictionSize := float64(predictionCount)
+		rmse.WindSpeed = math.Sqrt(rmse.WindSpeed / predictionSize)
+		rmse.RelHumidity = math.Sqrt(rmse.RelHumidity / predictionSize)
+		rmse.Precipitation = math.Sqrt(rmse.Precipitation / predictionSize)
+		rmse.TempAverage = math.Sqrt(rmse.TempAverage / predictionSize)
+		rmse.TempMax = math.Sqrt(rmse.TempMax / predictionSize)
+		rmse.TempMin = math.Sqrt(rmse.TempMin / predictionSize)
+
+		nrmse.WindSpeed = rmse.WindSpeed / (max.WindSpeed - min.WindSpeed)
+		nrmse.RelHumidity = rmse.RelHumidity / (max.RelHumidity - min.RelHumidity)
+		nrmse.Precipitation = rmse.Precipitation / (max.Precipitation - min.Precipitation)
+		nrmse.TempAverage = rmse.TempAverage / (max.TempAverage - min.TempAverage)
+		nrmse.TempMax = rmse.TempMax / (max.TempMax - min.TempMax)
+		nrmse.TempMin = rmse.TempMin / (max.TempMin - min.TempMin)
+
+		nrmseEval[i-1] = nrmse
+		nrmseEval[i-1].FillString()
+		nrmseEval[i-1].DateStr = fmt.Sprintf("%s - %s", trainPerc, testPerc)
+	}
+	evaluatedNrmse.Items = nrmseEval
+	return
+}
+
+func (w *Weathers) KNearestNeighbor(kValue int, new Weather) (neighbors Weathers, result string) {
+	tempW := Weathers{}
+	tempW.Items = make([]Weather, len(w.Items))
+	for i, d := range w.Items {
+		distance := math.Pow(new.WindSpeed-d.WindSpeed, 2)
+		distance += math.Pow(new.RelHumidity-d.RelHumidity, 2)
+		distance += math.Pow(new.Precipitation-d.Precipitation, 2)
+		distance += math.Pow(new.TempAverage-d.TempAverage, 2)
+		distance += math.Pow(new.TempMax-d.TempMax, 2)
+		distance += math.Pow(new.TempMin-d.TempMin, 2)
+
+		w.Items[i].Distance = math.Sqrt(distance)
+		d.Distance = math.Sqrt(distance)
+		tempW.Items[i] = d
+	}
+
+	tempW.SortByDistance()
+	vote := make([]int, 2)
+	neighbors.Items = make([]Weather, kValue)
+	for i, d := range tempW.Items {
+		if i >= kValue {
+			break
+		}
+		if !d.Flood {
+			vote[0] += 1
+		} else {
+			vote[1] += 1
+		}
+		neighbors.Items[i] = d
+	}
+
+	if vote[0] >= vote[1] {
+		result = "No Flood"
+	} else {
+		result = "Flood"
+	}
+
+	return
+}
+
+func (w *Weathers) KNearestNeighborEval(step, magnitude, kValue, lagOrder int) (confusionMatrix []ConfusionMatrix) {
+	if magnitude*step > 100 {
+		return
+	}
+
+	confusionMatrix = make([]ConfusionMatrix, step)
+	for i := 1; i <= step; i++ {
+		testPerc := fmt.Sprintf("%d", i*magnitude)
+		trainPerc := fmt.Sprintf("%d", 100-i*magnitude)
+
+		test := magnitude * i
+		testSize := len(w.Items) * test / 100
+		trainSize := len(w.Items) - testSize
+
+		predictionCount := 0
+
+		for j := trainSize; j < len(w.Items)-1; j++ {
+			trainSlice := w.Items[:j]
+			trainDataset := Weathers{
+				Items: trainSlice,
+			}
+
+			predicted := trainDataset.VectorAutoregression(lagOrder)
+			_, knnResult := trainDataset.KNearestNeighbor(kValue, predicted)
+			actual := w.Items[j]
+
+			flood := false
+			if knnResult == "Flood" {
+				flood = true
+			}
+
+			if actual.Flood && flood {
+				confusionMatrix[i-1].TruePositive += 1
+			}
+			if !actual.Flood && flood {
+				confusionMatrix[i-1].FalsePositive += 1
+			}
+			if actual.Flood && !flood {
+				confusionMatrix[i-1].FalseNegative += 1
+			}
+			if !actual.Flood && !flood {
+				confusionMatrix[i-1].TrueNegative += 1
+			}
+
+			predictionCount++
+		}
+		confusionMatrix[i-1].Metrics()
+		confusionMatrix[i-1].FillString()
+		confusionMatrix[i-1].TrainTestStr = fmt.Sprintf("%s - %s", trainPerc, testPerc)
+	}
+
+	return
+}
+
+func (w *Weathers) SmoteOversampling(smoteKValue int) (oversampledData Weathers) {
+	minoritySample := w.GetMinoritySample()
+
+	var syntheticData []Weather
+	for _, d := range minoritySample.Items {
+		neighbors, _ := minoritySample.KNearestNeighbor(smoteKValue, d)
+		for _, e := range neighbors.Items {
+			syntheticData = append(syntheticData, d.InterpolateSyntheticData(e))
+		}
+	}
+
+	oversampledData.Items = make([]Weather, len(w.Items))
+	copy(oversampledData.Items, w.Items)
+	oversampledData.Oversample.SynthData = syntheticData
+	oversampledData.Oversample.SynthDataCount = len(syntheticData)
+	oversampledData.Items = append(oversampledData.Items, syntheticData...)
+
+	return
+}
+
+func (w *Weathers) GetMaxMin() (max, min Weather) {
+	max.WindSpeed = w.Items[0].WindSpeed
+	max.RelHumidity = w.Items[0].RelHumidity
+	max.Precipitation = w.Items[0].Precipitation
+	max.TempAverage = w.Items[0].TempAverage
+	max.TempMax = w.Items[0].TempMax
+	max.TempMin = w.Items[0].TempMin
+
+	min.WindSpeed = w.Items[0].WindSpeed
+	min.RelHumidity = w.Items[0].RelHumidity
+	min.Precipitation = w.Items[0].Precipitation
+	min.TempAverage = w.Items[0].TempAverage
+	min.TempMax = w.Items[0].TempMax
+	min.TempMin = w.Items[0].TempMin
+
+	for _, d := range w.Items {
+		if max.WindSpeed < d.WindSpeed {
+			max.WindSpeed = d.WindSpeed
+		}
+		if max.RelHumidity < d.RelHumidity {
+			max.RelHumidity = d.RelHumidity
+		}
+		if max.Precipitation < d.Precipitation {
+			max.Precipitation = d.Precipitation
+		}
+		if max.TempAverage < d.TempAverage {
+			max.TempAverage = d.TempAverage
+		}
+		if max.TempMax < d.TempMax {
+			max.TempMax = d.TempMax
+		}
+		if max.TempMin < d.TempMin {
+			max.TempMin = d.TempMin
+		}
+
+		if min.WindSpeed > d.WindSpeed {
+			if d.WindSpeed != -999.0 {
+				min.WindSpeed = d.WindSpeed
+			}
+		}
+		if min.RelHumidity > d.RelHumidity {
+			if d.RelHumidity != -999.0 {
+				min.RelHumidity = d.RelHumidity
+			}
+		}
+		if min.Precipitation > d.Precipitation {
+			if d.Precipitation != -999.0 {
+				min.Precipitation = d.Precipitation
+			}
+		}
+		if min.TempAverage > d.TempAverage {
+			if d.TempAverage != -999.0 {
+				min.TempAverage = d.TempAverage
+			}
+		}
+		if min.TempMax > d.TempMax {
+			if d.TempMax != -999.0 {
+				min.TempMax = d.TempMax
+			}
+		}
+		if min.TempMin > d.TempMin {
+			if d.TempMin != -999.0 {
+				min.TempMin = d.TempMin
+			}
+		}
+	}
+	return
+}
+
+type ByDistance []Weather
+
+func (a ByDistance) Len() int {
+	return len(a)
+}
+
+func (a ByDistance) Swap(i, j int) {
+	a[i], a[j] = a[j], a[i]
+}
+
+func (a ByDistance) Less(i, j int) bool {
+	return a[i].Distance < a[j].Distance
+}
+
+func (w *Weathers) SortByDistance() {
+	sort.Sort(ByDistance(w.Items))
+}
+
+func (w *Weathers) GetMinoritySample() (minoritySample Weathers) {
+	for _, d := range w.Items {
+		if d.Flood {
+			minoritySample.Items = append(minoritySample.Items, d)
+		}
+	}
 	return
 }
 
@@ -1851,6 +2177,17 @@ func (w *Weathers) FillString() {
 	for i := 0; i < len(w.Items); i++ {
 		w.Items[i].FillString()
 	}
+}
+
+func (w *Weather) InterpolateSyntheticData(neighbor Weather) (synth Weather) {
+	synth.WindSpeed = w.WindSpeed + (rand.Float64() * (neighbor.WindSpeed - w.WindSpeed))
+	synth.RelHumidity = w.RelHumidity + (rand.Float64() * (neighbor.RelHumidity - w.RelHumidity))
+	synth.Precipitation = w.Precipitation + (rand.Float64() * (neighbor.Precipitation - w.Precipitation))
+	synth.TempAverage = w.TempAverage + (rand.Float64() * (neighbor.TempAverage - w.TempAverage))
+	synth.TempMax = w.TempMax + (rand.Float64() * (neighbor.TempMax - w.TempMax))
+	synth.TempMin = w.TempMin + (rand.Float64() * (neighbor.TempMin - w.TempMin))
+	synth.Flood = true
+	return
 }
 
 func (w *Weather) FillString() {
@@ -1861,6 +2198,7 @@ func (w *Weather) FillString() {
 	w.TempAverageStr = strconv.FormatFloat(w.TempAverage, 'f', 2, 64)
 	w.TempMaxStr = strconv.FormatFloat(w.TempMax, 'f', 2, 64)
 	w.TempMinStr = strconv.FormatFloat(w.TempMin, 'f', 2, 64)
+	w.DistanceStr = strconv.FormatFloat(w.Distance, 'f', 2, 64)
 	if w.Flood {
 		w.FloodStr = template.HTML(fmt.Sprintf("<p class=\"text-emerald-700\">%v</p>", w.Flood))
 	} else {
@@ -1906,22 +2244,34 @@ func (n *NasaData) Stats() {
 		}
 
 		if n.Min.WindSpeed > d.WindSpeed {
-			n.Min.WindSpeed = d.WindSpeed
+			if d.WindSpeed != -999.0 {
+				n.Min.WindSpeed = d.WindSpeed
+			}
 		}
 		if n.Min.RelHumidity > d.RelHumidity {
-			n.Min.RelHumidity = d.RelHumidity
+			if d.RelHumidity != -999.0 {
+				n.Min.RelHumidity = d.RelHumidity
+			}
 		}
 		if n.Min.Precipitation > d.Precipitation {
-			n.Min.Precipitation = d.Precipitation
+			if d.Precipitation != -999.0 {
+				n.Min.Precipitation = d.Precipitation
+			}
 		}
 		if n.Min.TempAverage > d.TempAverage {
-			n.Min.TempAverage = d.TempAverage
+			if d.TempAverage != -999.0 {
+				n.Min.TempAverage = d.TempAverage
+			}
 		}
 		if n.Min.TempMax > d.TempMax {
-			n.Min.TempMax = d.TempMax
+			if d.TempMax != -999.0 {
+				n.Min.TempMax = d.TempMax
+			}
 		}
 		if n.Min.TempMin > d.TempMin {
-			n.Min.TempMin = d.TempMin
+			if d.TempMin != -999.0 {
+				n.Min.TempMin = d.TempMin
+			}
 		}
 
 		sum.WindSpeed += d.WindSpeed
@@ -1941,12 +2291,12 @@ func (n *NasaData) Stats() {
 
 	sumSquares := Nasa{}
 	for _, d := range n.Items {
-		sumSquares.WindSpeed = math.Pow((d.WindSpeed - n.Mean.WindSpeed), 2)
-		sumSquares.RelHumidity = math.Pow((d.RelHumidity - n.Mean.RelHumidity), 2)
-		sumSquares.Precipitation = math.Pow((d.Precipitation - n.Mean.Precipitation), 2)
-		sumSquares.TempAverage = math.Pow((d.TempAverage - n.Mean.TempAverage), 2)
-		sumSquares.TempMax = math.Pow((d.TempMax - n.Mean.TempMax), 2)
-		sumSquares.TempMin = math.Pow((d.TempMin - n.Mean.TempMin), 2)
+		sumSquares.WindSpeed += math.Pow((d.WindSpeed - n.Mean.WindSpeed), 2)
+		sumSquares.RelHumidity += math.Pow((d.RelHumidity - n.Mean.RelHumidity), 2)
+		sumSquares.Precipitation += math.Pow((d.Precipitation - n.Mean.Precipitation), 2)
+		sumSquares.TempAverage += math.Pow((d.TempAverage - n.Mean.TempAverage), 2)
+		sumSquares.TempMax += math.Pow((d.TempMax - n.Mean.TempMax), 2)
+		sumSquares.TempMin += math.Pow((d.TempMin - n.Mean.TempMin), 2)
 	}
 
 	n.Variance.WindSpeed = sumSquares.WindSpeed / float64(len(n.Items))
@@ -1977,12 +2327,57 @@ func (n *NasaData) Stats() {
 }
 
 func (n *Nasa) FillString() {
-	n.WindSpeedStr = strconv.FormatFloat(n.WindSpeed, 'f', 2, 64)
-	n.RelHumidityStr = strconv.FormatFloat(n.RelHumidity, 'f', 2, 64)
-	n.PrecipitationStr = strconv.FormatFloat(n.Precipitation, 'f', 2, 64)
-	n.TempAverageStr = strconv.FormatFloat(n.TempAverage, 'f', 2, 64)
-	n.TempMaxStr = strconv.FormatFloat(n.TempMax, 'f', 2, 64)
-	n.TempMinStr = strconv.FormatFloat(n.TempMin, 'f', 2, 64)
+	n.WindSpeedStr = strconv.FormatFloat(n.WindSpeed, 'f', 3, 64)
+	n.RelHumidityStr = strconv.FormatFloat(n.RelHumidity, 'f', 3, 64)
+	n.PrecipitationStr = strconv.FormatFloat(n.Precipitation, 'f', 3, 64)
+	n.TempAverageStr = strconv.FormatFloat(n.TempAverage, 'f', 3, 64)
+	n.TempMaxStr = strconv.FormatFloat(n.TempMax, 'f', 3, 64)
+	n.TempMinStr = strconv.FormatFloat(n.TempMin, 'f', 3, 64)
+}
+
+func (n *ConfusionMatrix) Metrics() {
+	accNumerator := float64(n.TruePositive + n.TrueNegative)
+	accDenominator := float64(n.TruePositive + n.TrueNegative + n.FalsePositive + n.FalseNegative)
+	if accNumerator == 0 || accDenominator == 0 {
+		n.Accuracy = 0
+	} else {
+		n.Accuracy = accNumerator / accDenominator
+	}
+
+	precNumerator := float64(n.TruePositive)
+	precDenominator := float64(n.TruePositive + n.FalsePositive)
+	if precNumerator == 0 || precDenominator == 0 {
+		n.Precision = 0
+	} else {
+		n.Precision = precNumerator / precDenominator
+	}
+
+	recNumerator := float64(n.TruePositive)
+	recDenominator := float64(n.TruePositive + n.FalseNegative)
+	if recNumerator == 0 || recDenominator == 0 {
+		n.Recall = 0
+	} else {
+		n.Recall = recNumerator / recDenominator
+	}
+
+	f1Numerator := (n.Precision * n.Recall)
+	f1Denominator := (n.Precision + n.Recall)
+	if f1Numerator == 0 || f1Denominator == 0 {
+		n.F1Score = 0
+	} else {
+		n.F1Score = 2 * (f1Numerator / f1Denominator)
+	}
+}
+
+func (n *ConfusionMatrix) FillString() {
+	n.TruePositiveStr = strconv.Itoa(n.TruePositive)
+	n.TrueNegativeStr = strconv.Itoa(n.TrueNegative)
+	n.FalsePositiveStr = strconv.Itoa(n.FalsePositive)
+	n.FalseNegativeStr = strconv.Itoa(n.FalseNegative)
+	n.AccuracyStr = strconv.FormatFloat(n.Accuracy, 'f', 4, 64)
+	n.PrecisionStr = strconv.FormatFloat(n.Precision, 'f', 4, 64)
+	n.RecallStr = strconv.FormatFloat(n.Recall, 'f', 4, 64)
+	n.F1ScoreStr = strconv.FormatFloat(n.F1Score, 'f', 4, 64)
 }
 
 func (s *Statistics) FillStatistics(startDate, endDate time.Time, city string) {
@@ -1995,8 +2390,9 @@ func (s *Statistics) FillStatistics(startDate, endDate time.Time, city string) {
 	s.News.FloodCount = strconv.Itoa(len(s.Ref.News.Items))
 	s.Weathers.DataCount = strconv.Itoa(len(s.Ref.Weathers.Items))
 	s.DifferencedWeathers.DataCount = strconv.Itoa(len(s.Ref.DifferencedWeathers.Items))
+	s.Smote.DataCount = strconv.Itoa(len(s.Ref.Smote.Items))
 
-	var weathersFloodCount, differencedWeathersFloodCount int
+	var weathersFloodCount, differencedWeathersFloodCount, smoteFloodCount int
 	for _, d := range s.Ref.Weathers.Items {
 		if d.Flood {
 			weathersFloodCount++
@@ -2007,14 +2403,22 @@ func (s *Statistics) FillStatistics(startDate, endDate time.Time, city string) {
 			differencedWeathersFloodCount++
 		}
 	}
-	var weathersFloodPercentage, differencedWeathersFloodPercentage float64
+	for _, d := range s.Ref.Smote.Items {
+		if d.Flood {
+			smoteFloodCount++
+		}
+	}
+	var weathersFloodPercentage, differencedWeathersFloodPercentage, smoteFloodPercentage float64
 	weathersFloodPercentage = float64(weathersFloodCount) / float64(len(s.Ref.Weathers.Items))
 	differencedWeathersFloodPercentage = float64(differencedWeathersFloodCount) / float64(len(s.Ref.DifferencedWeathers.Items))
+	smoteFloodPercentage = float64(smoteFloodCount) / float64(len(s.Ref.DifferencedWeathers.Items))
 
 	s.Weathers.FloodCount = strconv.Itoa(weathersFloodCount)
-	s.Weathers.FloodPercentage = strconv.FormatFloat(weathersFloodPercentage, 'f', 4, 64)
+	s.Weathers.FloodPercentage = strconv.FormatFloat(weathersFloodPercentage*100, 'f', 2, 64) + "%"
 	s.DifferencedWeathers.FloodCount = strconv.Itoa(differencedWeathersFloodCount)
-	s.DifferencedWeathers.FloodPercentage = strconv.FormatFloat(differencedWeathersFloodPercentage, 'f', 4, 64)
+	s.DifferencedWeathers.FloodPercentage = strconv.FormatFloat(differencedWeathersFloodPercentage*100, 'f', 2, 64) + "%"
+	s.Smote.FloodCount = strconv.Itoa(smoteFloodCount)
+	s.Smote.FloodPercentage = strconv.FormatFloat(smoteFloodPercentage*100, 'f', 1, 64) + "%"
 
 	s.FillMap()
 }
@@ -2058,6 +2462,15 @@ func (s *Statistics) FillMap() {
 		{Key: "Data Count", Value: s.DifferencedWeathers.DataCount},
 		{Key: "Flood Count", Value: s.DifferencedWeathers.FloodCount},
 		{Key: "Flood Percentage", Value: s.DifferencedWeathers.FloodPercentage},
+	}
+
+	s.SmoteMap = []KeyValue{
+		{Key: "City", Value: s.City},
+		{Key: "Start Date", Value: s.StartDate},
+		{Key: "End Date", Value: s.EndDate},
+		{Key: "Data Count", Value: s.Smote.DataCount},
+		{Key: "Flood Count", Value: s.Smote.FloodCount},
+		{Key: "Flood Percentage", Value: s.Smote.FloodPercentage},
 	}
 }
 
