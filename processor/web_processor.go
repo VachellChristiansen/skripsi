@@ -41,9 +41,12 @@ func NewWebProcessor(l helper.LoggerHelper) WebProcessor {
 
 const (
 	DateHyphenYMD = "2006-01-02"
+	FlagV2        = false
+	MainPage      = "mainv2"
 )
 
 func (p *WebProcessorImpl) HandleFloodPredictionRequestV2(c echo.Context) error {
+	lagOrder := 0
 	startDateLimit := time.Date(2007, 12, 31, 0, 0, 0, 0, time.Local)
 	endDateLimit := time.Date(2024, 10, 1, 0, 0, 0, 0, time.Local)
 	p.logger.LogAndContinue("Start Processing Request")
@@ -63,7 +66,7 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequestV2(c echo.Context) error 
 	// Begin Validation
 	startDate, err := time.Parse(DateHyphenYMD, c.FormValue("start_date"))
 	if err != nil {
-		return c.Render(http.StatusOK, "main", IndexData{
+		return c.Render(http.StatusOK, MainPage, IndexData{
 			Err:        "Parsing Date Error",
 			StatusCode: http.StatusBadRequest,
 			Timestamp:  time.Now().Unix(),
@@ -71,7 +74,7 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequestV2(c echo.Context) error 
 	}
 	endDate, err := time.Parse(DateHyphenYMD, c.FormValue("end_date"))
 	if err != nil {
-		return c.Render(http.StatusOK, "main", IndexData{
+		return c.Render(http.StatusOK, MainPage, IndexData{
 			Err:        "Parsing Date Error",
 			StatusCode: http.StatusBadRequest,
 			Timestamp:  time.Now().Unix(),
@@ -80,21 +83,21 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequestV2(c echo.Context) error 
 
 	city := c.FormValue("city")
 	if startDate.After(endDate) {
-		return c.Render(http.StatusOK, "main", IndexData{
+		return c.Render(http.StatusOK, MainPage, IndexData{
 			Err:        "Start Date can't be later than End Date",
 			StatusCode: http.StatusUnprocessableEntity,
 		})
 	}
 
 	if int(endDate.Sub(startDate).Hours()/24) < 180 {
-		return c.Render(http.StatusOK, "main", IndexData{
+		return c.Render(http.StatusOK, MainPage, IndexData{
 			Err:        "Day Count can't be lower than 180 days to ensure proper calculation",
 			StatusCode: http.StatusUnprocessableEntity,
 		})
 	}
 
 	if startDate.Before(startDateLimit) || endDate.After(endDateLimit) {
-		return c.Render(http.StatusOK, "main", IndexData{
+		return c.Render(http.StatusOK, MainPage, IndexData{
 			Err:        "Date can only be within 2008/01/01 until 2024/09/30",
 			StatusCode: http.StatusUnprocessableEntity,
 		})
@@ -102,44 +105,48 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequestV2(c echo.Context) error 
 
 	kValue, err := strconv.Atoi(c.FormValue("k_value"))
 	if err != nil {
-		return c.Render(http.StatusOK, "main", IndexData{
+		return c.Render(http.StatusOK, MainPage, IndexData{
 			Err:        "K Value is not a valid number",
 			StatusCode: http.StatusUnprocessableEntity,
 		})
 	}
 
 	if kValue <= 0 || kValue > 500 {
-		return c.Render(http.StatusOK, "main", IndexData{
+		return c.Render(http.StatusOK, MainPage, IndexData{
 			Err:        "Chosen K Value is not Valid (Must be 1 - 500)",
 			StatusCode: http.StatusUnprocessableEntity,
 		})
 	}
 
-	lagOrder, err := strconv.Atoi(c.FormValue("lag_order"))
-	if err != nil {
-		return c.Render(http.StatusOK, "main", IndexData{
-			Err:        "Lag Order is not a valid number",
-			StatusCode: http.StatusUnprocessableEntity,
-		})
-	}
+	if FlagV2 {
+		lagOrder, err = strconv.Atoi(c.FormValue("lag_order"))
+		if err != nil {
+			return c.Render(http.StatusOK, MainPage, IndexData{
+				Err:        "Lag Order is not a valid number",
+				StatusCode: http.StatusUnprocessableEntity,
+			})
+		}
 
-	if lagOrder <= 0 || lagOrder > 10 {
-		return c.Render(http.StatusOK, "main", IndexData{
-			Err:        "Chosen Lag Order is not Valid (Must be 1 - 10)",
-			StatusCode: http.StatusUnprocessableEntity,
-		})
+		if lagOrder <= 0 || lagOrder > 10 {
+			return c.Render(http.StatusOK, MainPage, IndexData{
+				Err:        "Chosen Lag Order is not Valid (Must be 1 - 10)",
+				StatusCode: http.StatusUnprocessableEntity,
+			})
+		}
+	} else {
+		lagOrder = 1
 	}
 
 	smoteK, err := strconv.Atoi(c.FormValue("smote_k"))
 	if err != nil {
-		return c.Render(http.StatusOK, "main", IndexData{
+		return c.Render(http.StatusOK, MainPage, IndexData{
 			Err:        "SMOET K Value is not a valid number",
 			StatusCode: http.StatusUnprocessableEntity,
 		})
 	}
 
 	if smoteK <= 0 || smoteK > 10 {
-		return c.Render(http.StatusOK, "main", IndexData{
+		return c.Render(http.StatusOK, MainPage, IndexData{
 			Err:        "Chosen SMOTE K Value is not Valid (Must be 1 - 10)",
 			StatusCode: http.StatusUnprocessableEntity,
 		})
@@ -150,7 +157,7 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequestV2(c echo.Context) error 
 
 	latlong, exists := cities[city]
 	if !exists {
-		return c.Render(http.StatusOK, "main", IndexData{
+		return c.Render(http.StatusOK, MainPage, IndexData{
 			Err:        "City is not available",
 			StatusCode: http.StatusUnprocessableEntity,
 		})
@@ -167,7 +174,7 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequestV2(c echo.Context) error 
 	url := fmt.Sprintf("%s?start=%s&end=%s&latitude=%s&longitude=%s&%s", constant.NasaPowerAPIBaseURL, startDateRequest, endDateRequest, latitude, longitude, constant.NasaPowerAPIParams)
 	weathers.PrepareNasa(url)
 	if weathers.Err != nil {
-		return c.Render(http.StatusOK, "main", IndexData{
+		return c.Render(http.StatusOK, MainPage, IndexData{
 			Err:        "Fetching Data from NASA Power API Fails",
 			StatusCode: http.StatusUnprocessableEntity,
 		})
@@ -175,7 +182,7 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequestV2(c echo.Context) error 
 
 	weathers.InjectNasa(&nasa)
 	if weathers.Err != nil {
-		return c.Render(http.StatusOK, "main", IndexData{
+		return c.Render(http.StatusOK, MainPage, IndexData{
 			Err:        "Preparing Data from NASA Power API Fails",
 			StatusCode: http.StatusUnprocessableEntity,
 		})
@@ -184,7 +191,7 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequestV2(c echo.Context) error 
 
 	weathers.InjectBnpb(&bnpb, startDate, endDate, city)
 	if weathers.Err != nil {
-		return c.Render(http.StatusOK, "main", IndexData{
+		return c.Render(http.StatusOK, MainPage, IndexData{
 			Err:        "Preparing Data from BNPB Fails",
 			StatusCode: http.StatusUnprocessableEntity,
 		})
@@ -192,7 +199,7 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequestV2(c echo.Context) error 
 
 	weathers.InjectNews(&news, startDate, endDate, city)
 	if weathers.Err != nil {
-		return c.Render(http.StatusOK, "main", IndexData{
+		return c.Render(http.StatusOK, MainPage, IndexData{
 			Err:        "Preparing Data from News Fails",
 			StatusCode: http.StatusUnprocessableEntity,
 		})
@@ -267,7 +274,7 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequestV2(c echo.Context) error 
 		"Timestamp":                         time.Now().Unix(),
 	}
 
-	return c.Render(http.StatusOK, "main", IndexData{
+	return c.Render(http.StatusOK, MainPage, IndexData{
 		Data:       viewData,
 		Message:    fmt.Sprintf("Preparation Done. Time Taken: %dms", time.Since(start).Milliseconds()),
 		StatusCode: http.StatusOK,
@@ -292,7 +299,7 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 	// Begin Validation
 	startDate, err := time.Parse("2006-01-02", c.FormValue("start_date"))
 	if err != nil {
-		return c.Render(http.StatusOK, "main", IndexData{
+		return c.Render(http.StatusOK, MainPage, IndexData{
 			Err:        "Parsing Date Error",
 			StatusCode: http.StatusBadRequest,
 			Timestamp:  time.Now().Unix(),
@@ -300,7 +307,7 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 	}
 	endDate, err := time.Parse("2006-01-02", c.FormValue("end_date"))
 	if err != nil {
-		return c.Render(http.StatusOK, "main", IndexData{
+		return c.Render(http.StatusOK, MainPage, IndexData{
 			Err:        "Parsing Date Error",
 			StatusCode: http.StatusBadRequest,
 			Timestamp:  time.Now().Unix(),
@@ -309,21 +316,21 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 
 	city := c.FormValue("city")
 	if startDate.After(endDate) {
-		return c.Render(http.StatusOK, "main", IndexData{
+		return c.Render(http.StatusOK, MainPage, IndexData{
 			Err:        "Start Date can't be later than End Date",
 			StatusCode: http.StatusUnprocessableEntity,
 		})
 	}
 
 	if int(endDate.Sub(startDate).Hours()/24) < 180 {
-		return c.Render(http.StatusOK, "main", IndexData{
+		return c.Render(http.StatusOK, MainPage, IndexData{
 			Err:        "Day Count can't be lower than 180 days to ensure proper calculation",
 			StatusCode: http.StatusUnprocessableEntity,
 		})
 	}
 
 	if startDate.Before(startDateLimit) || endDate.After(endDateLimit) {
-		return c.Render(http.StatusOK, "main", IndexData{
+		return c.Render(http.StatusOK, MainPage, IndexData{
 			Err:        "Date can only be within 2008/01/01 until 2024/09/30",
 			StatusCode: http.StatusUnprocessableEntity,
 		})
@@ -331,14 +338,14 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 
 	kValue, err := strconv.Atoi(c.FormValue("k_value"))
 	if err != nil {
-		return c.Render(http.StatusOK, "main", IndexData{
+		return c.Render(http.StatusOK, MainPage, IndexData{
 			Err:        "K Value is not a valid number",
 			StatusCode: http.StatusUnprocessableEntity,
 		})
 	}
 
 	if kValue <= 0 || kValue > 500 {
-		return c.Render(http.StatusOK, "main", IndexData{
+		return c.Render(http.StatusOK, MainPage, IndexData{
 			Err:        "Chosen K Value is not Valid (Must be 1 - 500)",
 			StatusCode: http.StatusUnprocessableEntity,
 		})
@@ -346,14 +353,14 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 
 	smoteK, err := strconv.Atoi(c.FormValue("smote_k"))
 	if err != nil {
-		return c.Render(http.StatusOK, "main", IndexData{
+		return c.Render(http.StatusOK, MainPage, IndexData{
 			Err:        "SMOET K Value is not a valid number",
 			StatusCode: http.StatusUnprocessableEntity,
 		})
 	}
 
 	if smoteK <= 0 || smoteK > 10 {
-		return c.Render(http.StatusOK, "main", IndexData{
+		return c.Render(http.StatusOK, MainPage, IndexData{
 			Err:        "Chosen SMOTE K Value is not Valid (Must be 1 - 10)",
 			StatusCode: http.StatusUnprocessableEntity,
 		})
@@ -364,7 +371,7 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 
 	latlong, exists := cities[city]
 	if !exists {
-		return c.Render(http.StatusOK, "main", IndexData{
+		return c.Render(http.StatusOK, MainPage, IndexData{
 			Err:        "City is not available",
 			StatusCode: http.StatusUnprocessableEntity,
 		})
@@ -376,7 +383,7 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 	url := fmt.Sprintf("%s?start=%s&end=%s&latitude=%s&longitude=%s&%s", constant.NasaPowerAPIBaseURL, startDateRequest, endDateRequest, latitude, longitude, constant.NasaPowerAPIParams)
 	err = p.PrepareNasaCSV(url)
 	if err != nil {
-		return c.Render(http.StatusOK, "main", IndexData{
+		return c.Render(http.StatusOK, MainPage, IndexData{
 			Err:        fmt.Sprintf("Preparing NASA data fails, %s", err.Error()),
 			StatusCode: http.StatusInternalServerError,
 		})
@@ -386,7 +393,7 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 	nasaDataStr := [][]string{}
 	err = p.PreprocessNasaCSV(&nasaDataStr, &nasaData)
 	if err != nil {
-		return c.Render(http.StatusOK, "main", IndexData{
+		return c.Render(http.StatusOK, MainPage, IndexData{
 			Err:        fmt.Sprintf("Preprocessing NASA data fails, %s", err.Error()),
 			StatusCode: http.StatusInternalServerError,
 		})
@@ -397,7 +404,7 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 	floodData := []float64{}
 	err = p.PreprocessBNPBCSV(&bnpbData, &bnpbDataOri, &floodData, startDate, endDate, city)
 	if err != nil {
-		return c.Render(http.StatusOK, "main", IndexData{
+		return c.Render(http.StatusOK, MainPage, IndexData{
 			Err:        fmt.Sprintf("Preprocessing BNPB data fails, %s", err.Error()),
 			StatusCode: http.StatusInternalServerError,
 		})
@@ -408,7 +415,7 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 	newsFloodData := []float64{}
 	err = p.PreprocessFloodNewsCSV(&newsData, &newsDataOri, &newsFloodData, startDate, endDate, city)
 	if err != nil {
-		return c.Render(http.StatusOK, "main", IndexData{
+		return c.Render(http.StatusOK, MainPage, IndexData{
 			Err:        fmt.Sprintf("Preprocessing Flood News data fails, %s", err.Error()),
 			StatusCode: http.StatusInternalServerError,
 		})
@@ -429,7 +436,7 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 	for i := 0; i < len(nasaData); i++ {
 		stationary, criticalValue, adfScore, err := p.adfTest(nasaData[i])
 		if err != nil {
-			return c.Render(http.StatusOK, "main", IndexData{
+			return c.Render(http.StatusOK, MainPage, IndexData{
 				Err:        fmt.Sprintf("Processing ADF test fails, %s", err.Error()),
 				StatusCode: http.StatusInternalServerError,
 			})
@@ -442,7 +449,7 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 			differencedNasaDataColumn = p.differencing(differencedNasaDataColumn)
 			stationary, criticalValue, adfScore, err = p.adfTest(differencedNasaDataColumn)
 			if err != nil {
-				return c.Render(http.StatusOK, "main", IndexData{
+				return c.Render(http.StatusOK, MainPage, IndexData{
 					Err:        fmt.Sprintf("Processing ADF test fails, %s", err.Error()),
 					StatusCode: http.StatusInternalServerError,
 				})
@@ -470,7 +477,7 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 			differencedData = p.differencing(data)
 			_, criticalValue, adfScore, err = p.adfTest(differencedData)
 			if err != nil {
-				return c.Render(http.StatusOK, "main", IndexData{
+				return c.Render(http.StatusOK, MainPage, IndexData{
 					Err:        fmt.Sprintf("Processing ADF test fails, %s", err.Error()),
 					StatusCode: http.StatusInternalServerError,
 				})
@@ -489,7 +496,7 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 	p.PrepareDifferencedStatistics(stationaryNasaWithFloodData, startDate, endDate, city, &stationaryStatisticData)
 	predictedValues, err := p.vectorAutoregression(stationaryNasaWithFloodData)
 	if err != nil {
-		return c.Render(http.StatusOK, "main", IndexData{
+		return c.Render(http.StatusOK, MainPage, IndexData{
 			Err:        fmt.Sprintf("Processing VAR Autoregression fails, %s", err.Error()),
 			StatusCode: http.StatusInternalServerError,
 		})
@@ -582,13 +589,13 @@ func (p *WebProcessorImpl) HandleFloodPredictionRequest(c echo.Context) error {
 	}
 	jsData, err := json.Marshal(viewData)
 	if err != nil {
-		return c.Render(http.StatusOK, "main", IndexData{
+		return c.Render(http.StatusOK, MainPage, IndexData{
 			Err:        fmt.Sprintf("Marshaling data into json fails, %s", err.Error()),
 			StatusCode: http.StatusInternalServerError,
 		})
 	}
 
-	return c.Render(http.StatusOK, "main", IndexData{
+	return c.Render(http.StatusOK, MainPage, IndexData{
 		Data:       viewData,
 		JSData:     string(jsData),
 		Message:    fmt.Sprintf("Preparation Done. Time Taken: %dms", time.Since(start).Milliseconds()),
