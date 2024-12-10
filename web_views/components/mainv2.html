@@ -509,6 +509,51 @@
                             </table>
                         </div>
                     </div>
+                    <div x-show="showing === 'smoteKnnEval'" class="w-full h-full flex flex-col gap-6 overflow-auto">
+                      <div class="flex flex-col gap-4">
+                          <h1 class="text-2xl font-bold">KNN Evaluation After Oversampling</h1>
+                          
+                          <div class="flex flex-col gap-2">
+                              <h2 class="text-xl font-semibold">Fields</h2>
+                              <ul class="list-disc list-inside">
+                                  <li><strong>True Positive (TP):</strong> Cases where the model correctly predicted the positive class</li>
+                                  <li><strong>False Positive (FP):</strong> Cases where the model incorrectly predicts the positive class, when the actual class is negative</li>
+                                  <li><strong>True Negative (TN):</strong> Cases where the model correctly predicts the negative class</li>
+                                  <li><strong>False Negative (FN):</strong> Cases where the model incorrectly predicts the negative class when the actual class is positive</li>
+                                  <li><strong>Accuracy:</strong> Best when classes are balanced, but it can be misleading for imbalanced Datasets.</li>
+                                  <li><strong>Precision:</strong> Important when cost for false positives is high.</li>
+                                  <li><strong>Recall:</strong> Important when cost for false negatives is high.</li>
+                                  <li><strong>F1-Score:</strong> Balanced measure between precision and recall</li>
+                              </ul>
+                          </div>
+                      </div>
+                      <div class="w-full h-full overflow-x-auto">
+                          <table class="min-w-full table-auto border-collapse">
+                              <thead class="bg-gray-200">
+                              <tr>
+                                  {{ range .Data.SMOTEKNNEvalHeaders }}
+                                  <th class="px-4 py-2 sticky top-0 bg-stone-300">{{ . }}</th>
+                                  {{ end }}
+                              </tr>
+                              </thead>
+                              <tbody>
+                                  {{ range .Data.SMOTEKNNEvalValues }}
+                                  <tr>
+                                      <td class="border px-4 py-2">{{ .TrainTestStr }}</td>
+                                      <td class="border px-4 py-2">{{ .TruePositiveStr }}</td>
+                                      <td class="border px-4 py-2">{{ .FalsePositiveStr }}</td>
+                                      <td class="border px-4 py-2">{{ .TrueNegativeStr }}</td>
+                                      <td class="border px-4 py-2">{{ .FalseNegativeStr }}</td>
+                                      <td class="border px-4 py-2">{{ .AccuracyStr }}</td>
+                                      <td class="border px-4 py-2">{{ .PrecisionStr }}</td>
+                                      <td class="border px-4 py-2">{{ .RecallStr }}</td>
+                                      <td class="border px-4 py-2">{{ .F1ScoreStr }}</td>
+                                  </tr>
+                                  {{ end }}
+                              </tbody>
+                          </table>
+                      </div>
+                  </div>
                     <div class="w-1/4 h-full flex flex-col gap-4 justify-between">
                         <div class="w-full h-3/4 overflow-y-auto flex flex-col gap-2">
                             <button @click="showing = 'nasa'; stats = 'default'" class="p-2 rounded-lg border-2 hover:brightness-75 active:brightness-50">NASA DATA</button>
@@ -521,9 +566,8 @@
                             <button @click="showing = 'knnEval'; stats = 'default'" class="p-2 rounded-lg border-2 hover:brightness-75 active:brightness-50">KNN EVALUATION</button>
                             <button @click="showing = 'smote'; stats = 'default'" class="p-2 rounded-lg border-2 hover:brightness-75 active:brightness-50">SMOTE DATA</button>
                             <button @click="showing = 'smoteKnn'; stats = 'default'" class="p-2 rounded-lg border-2 hover:brightness-75 active:brightness-50">SMOTE KNN</button>
+                            <button @click="showing = 'smoteKnnEval'; stats = 'default'" class="p-2 rounded-lg border-2 hover:brightness-75 active:brightness-50">SMOTE KNN EVALUATION</button>
                         </div>
-                        <button x-show="tableView == false" @click="tableView = true; if (!tableInitialized) { injectData(); tableInitialized = true; }" class="w-full p-2 rounded-lg border-2 bg-emerald-200 hover:brightness-75 active:brightness-50">ENABLE TABLE VIEW</button>
-                        <button x-show="tableView == true" @click="tableView = false" class="w-full p-2 rounded-lg border-2 bg-rose-200 hover:brightness-75 active:brightness-50">DISABLE TABLE VIEW</button>
                         <div x-show="showing == 'nasa'" class="w-full h-1/4 p-2 border-2 rounded-md">
                             {{ range .Data.Statistics.NasaMap }}
                             <div>

@@ -15,163 +15,167 @@ type IndexData struct {
 }
 
 type Weather struct {
-	Date             time.Time
-	WindSpeed        float64
-	RelHumidity      float64
-	Precipitation    float64
-	TempAverage      float64
-	TempMax          float64
-	TempMin          float64
-	Distance         float64
-	Flood            bool
-	DateStr          string
-	WindSpeedStr     string
-	RelHumidityStr   string
-	PrecipitationStr string
-	TempAverageStr   string
-	TempMaxStr       string
-	TempMinStr       string
-	DistanceStr      string
-	FloodStr         template.HTML
+	Date                time.Time     `json:"date"`
+	WindSpeed           float64       `json:"wind_speed"`
+	RelHumidity         float64       `json:"rel_humidity"`
+	Precipitation       float64       `json:"precipitation"`
+	TempAverage         float64       `json:"temp_average"`
+	TempMax             float64       `json:"temp_max"`
+	TempMin             float64       `json:"temp_min"`
+	Distance            float64       `json:"distance"`
+	Flood               bool          `json:"flood"`
+	CosineSimilarity    []float64     `json:"cosine_similarity"`
+	AvgCosineSimilarity float64       `json:"avg_cosine_similarity"`
+	DateStr             string        `json:"date_str"`
+	WindSpeedStr        string        `json:"wind_speed_str"`
+	RelHumidityStr      string        `json:"rel_humidity_str"`
+	PrecipitationStr    string        `json:"precipitation_str"`
+	TempAverageStr      string        `json:"temp_average_str"`
+	TempMaxStr          string        `json:"temp_max_str"`
+	TempMinStr          string        `json:"temp_min_str"`
+	DistanceStr         string        `json:"distance_str"`
+	FloodStr            template.HTML `json:"flood_str"`
 }
 
 type Weathers struct {
-	Items      []Weather
-	Diff       DifferencedStatistics
-	Oversample OversampledStatistics
-	Err        error
+	Items      []Weather             `json:"items"`
+	SynthItems []Weather             `json:"synth_items"`
+	Diff       DifferencedStatistics `json:"diff"`
+	Oversample OversampledStatistics `json:"oversample"`
+	Err        error                 `json:"err"`
 }
 
 type DifferencedStatistics struct {
-	Step                   int
-	CriticalValues         Weather
-	Gamma                  Weather
-	CriticalValuesGammaMap []KeyValue
+	Step                   int        `json:"step"`
+	CriticalValues         Weather    `json:"critical_values"`
+	Gamma                  Weather    `json:"gamma"`
+	CriticalValuesGammaMap []KeyValue `json:"critical_values_gamma_map"`
 }
 
 type OversampledStatistics struct {
-	SynthDataCount int
-	SynthData      []Weather
+	SynthDataCount int       `json:"synth_data_count"`
+	SynthData      []Weather `json:"synth_data"`
 }
 
 type Nasa struct {
-	WindSpeed        float64
-	RelHumidity      float64
-	Precipitation    float64
-	TempAverage      float64
-	TempMax          float64
-	TempMin          float64
-	DateStr          string
-	WindSpeedStr     string
-	RelHumidityStr   string
-	PrecipitationStr string
-	TempAverageStr   string
-	TempMaxStr       string
-	TempMinStr       string
+	WindSpeed        float64 `json:"wind_speed"`
+	RelHumidity      float64 `json:"rel_humidity"`
+	Precipitation    float64 `json:"precipitation"`
+	TempAverage      float64 `json:"temp_average"`
+	TempMax          float64 `json:"temp_max"`
+	TempMin          float64 `json:"temp_min"`
+	DateStr          string  `json:"date_str"`
+	WindSpeedStr     string  `json:"wind_speed_str"`
+	RelHumidityStr   string  `json:"rel_humidity_str"`
+	PrecipitationStr string  `json:"precipitation_str"`
+	TempAverageStr   string  `json:"temp_average_str"`
+	TempMaxStr       string  `json:"temp_max_str"`
+	TempMinStr       string  `json:"temp_min_str"`
 }
 
 type NasaData struct {
-	Items    []Nasa
-	Max      Nasa
-	Min      Nasa
-	Mean     Nasa
-	StdDev   Nasa
-	Variance Nasa
+	Items    []Nasa `json:"items"`
+	Max      Nasa   `json:"max"`
+	Min      Nasa   `json:"min"`
+	Mean     Nasa   `json:"mean"`
+	StdDev   Nasa   `json:"std_dev"`
+	Variance Nasa   `json:"variance"`
 }
 
 type Bnpb struct {
-	Code      string
-	CityID    string
-	Date      string
-	Occurence string
-	Location  string
-	City      string
-	Province  string
-	Cause     string
+	Code      string `json:"code"`
+	CityID    string `json:"city_id"`
+	Date      string `json:"date"`
+	Occurence string `json:"occurence"`
+	Location  string `json:"location"`
+	City      string `json:"city"`
+	Province  string `json:"province"`
+	Cause     string `json:"cause"`
 }
 
 type BnpbData struct {
-	Items []Bnpb
+	Items []Bnpb `json:"items"`
 }
 
 type News struct {
-	City string
-	Date string
-	Link template.HTML
+	City string        `json:"city"`
+	Date string        `json:"date"`
+	Link template.HTML `json:"link"`
 }
 
 type NewsData struct {
-	Items []News
+	Items []News `json:"items"`
 }
 
 type Statistics struct {
-	City                   string
-	StartDate              string
-	EndDate                string
-	Nasa                   NasaStatistic
-	NasaMap                []KeyValue
-	Bnpb                   BnpbStatistic
-	BnpbMap                []KeyValue
-	News                   NewsStatistic
-	NewsMap                []KeyValue
-	Weathers               WeatherStatistic
-	WeathersMap            []KeyValue
-	DifferencedWeathers    WeatherStatistic
-	DifferencedWeathersMap []KeyValue
-	Smote                  WeatherStatistic
-	SmoteMap               []KeyValue
-	Ref                    StatisticsReference
+	City                   string              `json:"city"`
+	StartDate              string              `json:"start_date"`
+	EndDate                string              `json:"end_date"`
+	Nasa                   NasaStatistic       `json:"nasa"`
+	NasaMap                []KeyValue          `json:"nasa_map"`
+	Bnpb                   BnpbStatistic       `json:"bnpb"`
+	BnpbMap                []KeyValue          `json:"bnpb_map"`
+	News                   NewsStatistic       `json:"news"`
+	NewsMap                []KeyValue          `json:"news_map"`
+	Weathers               WeatherStatistic    `json:"weathers"`
+	WeathersMap            []KeyValue          `json:"weathers_map"`
+	DifferencedWeathers    WeatherStatistic    `json:"differenced_weathers"`
+	DifferencedWeathersMap []KeyValue          `json:"differenced_weathers_map"`
+	Smote                  WeatherStatistic    `json:"smote"`
+	SmoteMap               []KeyValue          `json:"smote_map"`
+	Ref                    StatisticsReference `json:"ref"`
 }
 
 type StatisticsReference struct {
-	Nasa                *NasaData
-	Bnpb                *BnpbData
-	News                *NewsData
-	Weathers            *Weathers
-	DifferencedWeathers *Weathers
-	Smote               *Weathers
+	Nasa                *NasaData `json:"nasa"`
+	Bnpb                *BnpbData `json:"bnpb"`
+	News                *NewsData `json:"news"`
+	Weathers            *Weathers `json:"weathers"`
+	DifferencedWeathers *Weathers `json:"differenced_weathers"`
+	Smote               *Weathers `json:"smote"`
 }
 
 type NasaStatistic struct {
-	DayCount  string
-	DataCount string
+	DayCount  string `json:"day_count"`
+	DataCount string `json:"data_count"`
 }
 
 type BnpbStatistic struct {
-	FloodCount string
+	FloodCount string `json:"flood_count"`
 }
 
 type NewsStatistic struct {
-	FloodCount string
+	FloodCount string `json:"flood_count"`
 }
 
 type WeatherStatistic struct {
-	DataCount       string
-	FloodCount      string
-	FloodPercentage string
+	DataCount        string `json:"data_count"`
+	FloodCount       string `json:"flood_count"`
+	FloodPercentage  string `json:"flood_percentage"`
+	OversampledCount string `json:"oversampled_count"`
 }
 
 type ConfusionMatrix struct {
-	TruePositive     int
-	TrueNegative     int
-	FalsePositive    int
-	FalseNegative    int
-	Accuracy         float64
-	Precision        float64
-	Recall           float64
-	F1Score          float64
-	TrainTestStr     string
-	TruePositiveStr  string
-	TrueNegativeStr  string
-	FalsePositiveStr string
-	FalseNegativeStr string
-	AccuracyStr      string
-	PrecisionStr     string
-	RecallStr        string
-	F1ScoreStr       string
+	TruePositive     int     `json:"true_positive"`
+	TrueNegative     int     `json:"true_negative"`
+	FalsePositive    int     `json:"false_positive"`
+	FalseNegative    int     `json:"false_negative"`
+	Accuracy         float64 `json:"accuracy"`
+	Precision        float64 `json:"precision"`
+	Recall           float64 `json:"recall"`
+	F1Score          float64 `json:"f1_score"`
+	TrainTestStr     string  `json:"train_test_str"`
+	TruePositiveStr  string  `json:"true_positive_str"`
+	TrueNegativeStr  string  `json:"true_negative_str"`
+	FalsePositiveStr string  `json:"false_positive_str"`
+	FalseNegativeStr string  `json:"false_negative_str"`
+	AccuracyStr      string  `json:"accuracy_str"`
+	PrecisionStr     string  `json:"precision_str"`
+	RecallStr        string  `json:"recall_str"`
+	F1ScoreStr       string  `json:"f1_score_str"`
 }
 
 type KeyValue struct {
-	Key   string
-	Value string
+	Key   string `json:"key"`
+	Value string `json:"value"`
 }

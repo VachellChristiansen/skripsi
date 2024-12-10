@@ -8,3 +8,9 @@ sandbox/
 
 tmp/main
 tmp/nasa_data.*
+
+syntheticChecker.json
+weathers.json
+granger.json
+Synth.json
+skripsi/
